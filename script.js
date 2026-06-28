@@ -548,9 +548,9 @@ function renderAnalitik() {
   // Category breakdown for laporan section
   const catMap={};
   list.filter(t=>t.type==='expense').forEach(t=>{
-    const cat=EXPENSE_CATS.find(c=>c.id===t.cat)||{name:'Lainnya',emoji:'💸'};
-    if(!catMap[t.cat]) catMap[t.cat]={name:cat.name,emoji:cat.emoji,total:0};
-    catMap[t.cat].total+=t.amount;
+    const cat=EXPENSE_CATS.find(c=>c.id===t.catId)||{name:'Lainnya',emoji:'💸'};
+    if(!catMap[t.catId]) catMap[t.catId]={name:cat.name,emoji:cat.emoji,total:0};
+    catMap[t.catId].total+=t.amount;
   });
   const catBrk=Object.values(catMap).sort((a,b)=>b.total-a.total).slice(0,6);
   const maxCat=catBrk[0]?.total||1;
@@ -977,11 +977,11 @@ function renderBudget() {
   // Totals
   const totalLimit = budgets.reduce((s,b)=>s+b.limit,0);
   const totalUsed  = budgets.reduce((s,b)=>{
-    const used=monthTxs.filter(t=>t.cat===b.cat).reduce((ss,t)=>ss+t.amount,0);
+    const used=monthTxs.filter(t=>t.catId===b.cat).reduce((ss,t)=>ss+t.amount,0);
     return s+Math.min(used,b.limit);
   },0);
   const totalActualUsed = budgets.reduce((s,b)=>{
-    return s+monthTxs.filter(t=>t.cat===b.cat).reduce((ss,t)=>ss+t.amount,0);
+    return s+monthTxs.filter(t=>t.catId===b.cat).reduce((ss,t)=>ss+t.amount,0);
   },0);
   const totalRemain = totalLimit - totalActualUsed;
   const pct = totalLimit>0 ? Math.round((totalActualUsed/totalLimit)*100) : 0;
@@ -1009,7 +1009,7 @@ function renderBudget() {
   } else {
     bl.innerHTML=budgets.map(b=>{
       const cat=EXPENSE_CATS.find(c=>c.id===b.cat)||{name:b.cat,emoji:'💸'};
-      const used=monthTxs.filter(t=>t.cat===b.cat).reduce((s,t)=>s+t.amount,0);
+      const used=monthTxs.filter(t=>t.catId===b.cat).reduce((s,t)=>s+t.amount,0);
       const remain=b.limit-used;
       const bpct=b.limit>0?Math.round((used/b.limit)*100):0;
       const bcls=bpct>=90?'danger':bpct>=70?'warn':'safe';
@@ -1045,10 +1045,10 @@ function renderBudget() {
   // Untracked spending (expense categories with no budget)
   const budgetedCats=budgets.map(b=>b.cat);
   const catMap={};
-  monthTxs.filter(t=>!budgetedCats.includes(t.cat)).forEach(t=>{
-    const cat=EXPENSE_CATS.find(c=>c.id===t.cat)||{name:'Lainnya',emoji:'💸'};
-    if(!catMap[t.cat]) catMap[t.cat]={name:cat.name,emoji:cat.emoji,total:0};
-    catMap[t.cat].total+=t.amount;
+  monthTxs.filter(t=>!budgetedCats.includes(t.catId)).forEach(t=>{
+    const cat=EXPENSE_CATS.find(c=>c.id===t.catId)||{name:'Lainnya',emoji:'💸'};
+    if(!catMap[t.catId]) catMap[t.catId]={name:cat.name,emoji:cat.emoji,total:0};
+    catMap[t.catId].total+=t.amount;
   });
   const untracked=Object.values(catMap).sort((a,b)=>b.total-a.total);
   const utl=$('#budget-untracked-list');
@@ -1217,7 +1217,7 @@ function renderKalenderDetail() {
   // Transactions
   const txHTML=dayTxs.map(t=>{
     const cats=t.type==='income'?INCOME_CATS:EXPENSE_CATS;
-    const cat=cats.find(c=>c.id===t.cat)||{emoji:'💸',name:t.cat};
+    const cat=cats.find(c=>c.id===t.catId)||{emoji:'💸',name:t.catId};
     return `<div class="cal-tx-item">
       <div class="cal-tx-dot ${t.type}">${cat.emoji}</div>
       <div class="cal-tx-info">
