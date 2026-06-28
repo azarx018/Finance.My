@@ -1086,7 +1086,7 @@ function openBudgetSheet(editId=null) {
       p.classList.add('selected');
     }));
   }
-  const ba=$('#budget-amount'); if(ba) { ba.value=existing?existing.limit.toLocaleString('id'):''; formatAmountInput(ba); }
+  const ba=$('#budget-amount'); if(ba) { ba.value=existing?existing.limit.toLocaleString('id'):''; fmtAmtInput(ba); }
   openSheet('budget');
 }
 
@@ -1103,7 +1103,7 @@ function saveBudget() {
     const b=APP.budgets.find(x=>x.id===APP._editBudgetId);
     if(b){b.cat=cat;b.limit=limit;}
   } else {
-    APP.budgets.push({id:uid(),cat,limit,month});
+    APP.budgets.push({id:genId(),cat,limit,month});
   }
   persistBudgets(); closeSheet('budget'); renderBudget();
   showToast(APP._editBudgetId?'Budget diupdate ✅':'Budget ditambahkan ✅','success');
@@ -1250,7 +1250,7 @@ function saveReminder() {
   if(!title) return showToast('Isi judul pengingat','error');
   const raw=$('#reminder-amount')?.value?.replace(/\D/g,'')||'0';
   const cat=$('#reminder-cat')?.value||'bills';
-  APP.reminders.push({ id:uid(), date:APP.calSelectedDate, title, amount:parseInt(raw)||0, cat });
+  APP.reminders.push({ id:genId(), date:APP.calSelectedDate, title, amount:parseInt(raw)||0, cat });
   persistReminders(); closeSheet('reminder'); renderKalender();
   showToast('🔔 Pengingat ditambahkan','success');
 }
@@ -2013,7 +2013,7 @@ async function init() {
 
   // Format amount input for budget & reminder
   ['budget-amount','reminder-amount'].forEach(id=>{
-    const el=$('#'+id); if(el) el.addEventListener('input',()=>formatAmountInput(el));
+    const el=$('#'+id); if(el) el.addEventListener('input',()=>fmtAmtInput(el));
   });
 
   // KALENDER
