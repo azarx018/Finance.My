@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="192" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#16a34a"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="192" height="192" rx="44" fill="url(#bg)"/>
+  <rect width="192" height="192" rx="44" fill="url(#shine)"/>
+
+  <!-- Coin / Chart symbol -->
+  <circle cx="96" cy="88" r="38" fill="rgba(255,255,255,0.18)"/>
+  <circle cx="96" cy="88" r="28" fill="rgba(255,255,255,0.9)"/>
+
+  <!-- Rupiah "Rp" text -->
+  <text x="96" y="98"
+    font-family="'Segoe UI', Arial, sans-serif"
+    font-weight="700"
+    font-size="26"
+    fill="#16a34a"
+    text-anchor="middle"
+    dominant-baseline="middle">Rp</text>
+
+  <!-- App name bottom -->
+  <text x="96" y="152"
+    font-family="'Segoe UI', Arial, sans-serif"
+    font-weight="600"
+    font-size="16"
+    fill="rgba(255,255,255,0.9)"
+    text-anchor="middle">Azar Finance</text>
+</svg>
