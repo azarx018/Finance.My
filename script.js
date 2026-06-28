@@ -28,7 +28,7 @@ const APP = {
   selectedType:'income', selectedCatId:'other_inc', selectedWalletId:'default',
   dashFilter:'month', histFilter:'all', histSearch:'', debtFilter:'all', analitikPeriod:'month',
   deleteTarget:null,
-  darkMode:true, notifEnabled:false, notifTime:'20:00', notifTimerId:null,
+  darkMode:false, notifEnabled:false, notifTime:'20:00', notifTimerId:null,
   recType:'expense', recFreq:'monthly', selectedRecWalletId:'default',
   txPhoto:null,
 };
@@ -147,7 +147,7 @@ function saveSettings() { return _saveSettingsAsync(); }
 
 async function loadAll() {
   try {
-    const [tx, goals, debts, wallets, rec, dark, notif, ntime] = await Promise.all([
+    const [tx, goals, debts, wallets, rec, dark, notif, ntime, budgets, reminders] = await Promise.all([
       idbGet(STORE_DATA,     KEYS.tx),
       idbGet(STORE_DATA,     KEYS.goals),
       idbGet(STORE_DATA,     KEYS.debts),
@@ -156,19 +156,23 @@ async function loadAll() {
       idbGet(STORE_SETTINGS, KEYS.dark),
       idbGet(STORE_SETTINGS, KEYS.notif),
       idbGet(STORE_SETTINGS, KEYS.ntime),
+      idbGet(STORE_DATA,     'budgets'),
+      idbGet(STORE_DATA,     'reminders'),
     ]);
-    APP.transactions = tx      || [];
-    APP.goals        = goals   || [];
-    APP.debts        = debts   || [];
-    APP.wallets      = wallets || [];
-    APP.recurringTx  = rec     || [];
-    APP.darkMode     = dark    !== undefined ? dark  : true;
+    APP.transactions = tx        || [];
+    APP.goals        = goals     || [];
+    APP.debts        = debts     || [];
+    APP.wallets      = wallets   || [];
+    APP.recurringTx  = rec       || [];
+    APP.budgets      = budgets   || [];
+    APP.reminders    = reminders || [];
+    APP.darkMode     = dark    !== undefined ? dark  : false;
     APP.notifEnabled = notif   !== undefined ? notif : false;
     APP.notifTime    = ntime   || '20:00';
   } catch(e) {
     console.error('loadAll error:', e);
-    APP.transactions = []; APP.goals = []; APP.debts = [];
-    APP.wallets = []; APP.recurringTx = [];
+    APP.transactions=[]; APP.goals=[]; APP.debts=[];
+    APP.wallets=[]; APP.recurringTx=[]; APP.budgets=[]; APP.reminders=[];
   }
   if (!APP.wallets.length) {
     APP.wallets = [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
@@ -464,16 +468,32 @@ function renderDashboard() {
   const list = APP.transactions.filter(t => (!r || (t.date>=r.from && t.date<=r.to)) && t.type!=='transfer');
   const {income, expense} = calcTotals(list);
   const nw   = getTotalNetWorth();
+  const savings = income - expense;
+  const savRate = income>0 ? Math.round((savings/income)*100) : 0;
 
+  // Balance card
   $('#net-worth-display').textContent = formatRp(nw);
-  $('#net-worth-display').style.color = nw>=0 ? 'var(--clr-income)' : 'var(--clr-expense)';
   $('#dash-income').textContent  = formatRpC(income);
   $('#dash-expense').textContent = formatRpC(expense);
+  const wc = $('#dash-wallet-count');
+  if (wc) wc.textContent = APP.wallets.length + ' dompet';
 
-  const savings = income - expense;
-  $('#qc-savings').textContent   = formatRpC(savings);
-  $('#qc-savings').style.color   = savings>=0 ? 'var(--clr-income)' : 'var(--clr-expense)';
-  $('#qc-impian-n').textContent  = APP.goals.filter(g=>g.saved<g.target).length;
+  // Month summary cards
+  const todayTxs = APP.transactions.filter(t=>t.date===todayStr()&&t.type==='expense');
+  const todayExp = todayTxs.reduce((s,t)=>s+t.amount,0);
+  const dashSav = $('#dash-savings'), dashSavR = $('#dash-savings-rate');
+  const dashTodExp = $('#dash-today-exp'), dashTodTx = $('#dash-today-tx');
+  if(dashSav){ dashSav.textContent = formatRpC(savings); dashSav.style.color = savings>=0?'var(--income)':'var(--expense)'; }
+  if(dashSavR) dashSavR.textContent = 'Savings rate: '+savRate+'%';
+  if(dashTodExp) dashTodExp.textContent = formatRpC(todayExp);
+  if(dashTodTx) dashTodTx.textContent = todayTxs.length+' transaksi';
+
+  // Savings ring
+  const sbcRate = $('#dash-sbc-rate'), sbcDesc = $('#dash-sbc-desc'), ringFill = $('#dash-ring-fill');
+  if(sbcRate) sbcRate.textContent = savRate+'%';
+  if(sbcRate) sbcRate.style.color = savRate>=30?'var(--income)':savRate>=10?'var(--warn)':'var(--expense)';
+  if(sbcDesc) sbcDesc.textContent = savRate>=30?'Bagus! Pertahankan 💪':savRate>=10?'Lumayan, bisa lebih baik':'Perlu perhatian lebih';
+  if(ringFill){ const circ=138.2; ringFill.style.strokeDashoffset = circ - (Math.min(savRate,100)/100)*circ; }
 
   // Wallet chips
   const wsr = $('#wallet-scroll-row');
@@ -481,9 +501,9 @@ function renderDashboard() {
     const bal = getWalletBalance(w.id);
     return `<div class="wallet-chip">
       <span class="wc-emoji">${w.emoji}</span>
-      <div class="wc-info">
+      <div>
         <div class="wc-name">${w.name}</div>
-        <div class="wc-bal" style="color:${bal>=0?'var(--clr-income)':'var(--clr-expense)'}">${formatRpC(bal)}</div>
+        <div class="wc-bal" style="color:${bal>=0?'var(--income)':'var(--expense)'}">${formatRpC(bal)}</div>
       </div>
     </div>`;
   }).join('') + `<div class="wallet-chip" id="add-wallet-chip" style="border-style:dashed;min-width:54px;justify-content:center;"><span style="font-size:1.3rem;color:var(--txt-muted)">+</span></div>`;
@@ -503,6 +523,48 @@ function renderAnalitik() {
   const list = APP.transactions.filter(t => (!r || (t.date>=r.from && t.date<=r.to)) && t.type!=='transfer');
   const {income, expense, saldo} = calcTotals(list);
   const avgInc = getAvgMonthly('income',3);
+  const savRate = income>0 ? Math.round((saldo/income)*100) : 0;
+  const allTxs = APP.transactions.filter(t => !r || (t.date>=r.from && t.date<=r.to));
+  const days = r ? Math.max(1,Math.ceil((new Date(r.to)-new Date(r.from))/86400000)) : 30;
+  const avgDay = Math.round(expense/days);
+
+  // Update header cards
+  const anPL=$('#an-period-label'),anSR=$('#an-savrate'),anNet=$('#an-net'),anTx=$('#an-txcount');
+  if(anPL) anPL.textContent = prd==='month'?'Bulan Ini':prd==='3month'?'3 Bulan Terakhir':prd==='6month'?'6 Bulan Terakhir':'Tahun Ini';
+  if(anSR) anSR.textContent = savRate+'%';
+  if(anNet){ anNet.textContent=formatRpC(saldo); anNet.style.color=saldo>=0?'rgba(255,255,255,0.9)':'#fca5a5'; }
+  if(anTx) anTx.textContent = allTxs.length;
+
+  // Laporan summary 4 cards (now inside analitik)
+  const lapIncome=$('#lap-income'),lapExp=$('#lap-expense'),lapNet=$('#lap-net'),lapAvg=$('#lap-avg');
+  const lapInC=$('#lap-income-count'),lapExC=$('#lap-expense-count');
+  if(lapIncome) lapIncome.textContent=formatRp(income);
+  if(lapExp) lapExp.textContent=formatRp(expense);
+  if(lapNet){ lapNet.textContent=formatRp(saldo); lapNet.style.color=saldo>=0?'var(--income)':'var(--expense)'; }
+  if(lapAvg) lapAvg.textContent=formatRpC(avgDay)+'/hari';
+  if(lapInC) lapInC.textContent=allTxs.filter(t=>t.type==='income').length+' transaksi';
+  if(lapExC) lapExC.textContent=allTxs.filter(t=>t.type==='expense').length+' transaksi';
+
+  // Category breakdown for laporan section
+  const catMap={};
+  list.filter(t=>t.type==='expense').forEach(t=>{
+    const cat=EXPENSE_CATS.find(c=>c.id===t.cat)||{name:'Lainnya',emoji:'💸'};
+    if(!catMap[t.cat]) catMap[t.cat]={name:cat.name,emoji:cat.emoji,total:0};
+    catMap[t.cat].total+=t.amount;
+  });
+  const catBrk=Object.values(catMap).sort((a,b)=>b.total-a.total).slice(0,6);
+  const maxCat=catBrk[0]?.total||1;
+  const lapCat=$('#lap-cat-items');
+  if(lapCat) lapCat.innerHTML=catBrk.length?catBrk.map(c=>`
+    <div class="lap-cat-item">
+      <span class="lap-cat-emoji">${c.emoji}</span>
+      <div class="lap-cat-info">
+        <div class="lap-cat-name">${c.name}</div>
+        <div class="lap-cat-bar-bg"><div class="lap-cat-bar-fill" style="width:${Math.round((c.total/maxCat)*100)}%"></div></div>
+      </div>
+      <span class="lap-cat-amt">${formatRpC(c.total)}</span>
+    </div>`).join(''):'<div style="color:var(--txt-muted);font-size:0.8rem;padding:8px 0">Belum ada pengeluaran</div>';
+
   const avgExp = getAvgMonthly('expense',3);
 
   // Compare this month vs last month expenses
@@ -527,7 +589,7 @@ function renderAnalitik() {
   const rate = income>0 ? Math.round(saldo/income*100) : 0;
   const rEmoji = rate>=30?'🚀':rate>=15?'✅':rate>=0?'⚠️':'❌';
   const rDesc  = rate>=30?'Luar biasa! Kamu menabung dengan sangat baik.':rate>=15?'Bagus! Terus pertahankan.':rate>=0?'Perlu ditingkatkan lagi.':'Pengeluaran melebihi pemasukan!';
-  const rColor = rate>=15?'var(--clr-income)':rate>=0?'var(--clr-warn)':'var(--clr-expense)';
+  const rColor = rate>=15?'var(--income)':rate>=0?'var(--warn)':'var(--expense)';
   const rFill  = rate>=15?'linear-gradient(90deg,#22c55e,#86efac)':rate>=0?'linear-gradient(90deg,#f97316,#fbbf24)':'linear-gradient(90deg,#f43f5e,#fda4af)';
   $('#savings-rate-card').innerHTML = `
     <div class="src-emoji">${rEmoji}</div>
@@ -613,7 +675,7 @@ function renderRiwayat() {
 function renderDompet() {
   const total = getTotalNetWorth();
   $('#dompet-total').textContent = formatRp(total);
-  $('#dompet-total').style.color = total>=0 ? 'var(--clr-income)' : 'var(--clr-expense)';
+  $('#dompet-total').style.color = total>=0 ? 'var(--income)' : 'var(--expense)';
   $('#dompet-count-label').textContent = `${APP.wallets.length} dompet`;
 
   $('#wallet-list').innerHTML = APP.wallets.length
@@ -630,12 +692,12 @@ function renderDompet() {
               <div class="wcard-name">${w.name} ${isMain?'<span class="wcard-default-badge">Utama</span>':''}</div>
               <div class="wcard-count">${txCount} transaksi</div>
             </div>
-            <div class="wcard-bal" style="color:${bal>=0?'var(--clr-income)':'var(--clr-expense)'}">${formatRp(bal)}</div>
+            <div class="wcard-bal" style="color:${bal>=0?'var(--income)':'var(--expense)'}">${formatRp(bal)}</div>
           </div>
           <div class="wcard-stats">
             <div class="wcs-item"><div class="wcs-val income">+${formatRpC(inc)}</div><div class="wcs-label">Masuk</div></div>
             <div class="wcs-item"><div class="wcs-val expense">−${formatRpC(exp)}</div><div class="wcs-label">Keluar</div></div>
-            <div class="wcs-item"><div class="wcs-val" style="color:${bal>=0?'var(--clr-income)':'var(--clr-expense)'}">=${formatRpC(bal)}</div><div class="wcs-label">Saldo</div></div>
+            <div class="wcs-item"><div class="wcs-val" style="color:${bal>=0?'var(--income)':'var(--expense)'}">=${formatRpC(bal)}</div><div class="wcs-label">Saldo</div></div>
           </div>
           <div class="wcard-actions">
             <button class="wcard-btn transfer" data-transfer="${w.id}">🔄 Transfer</button>
@@ -652,6 +714,8 @@ function renderLainnya() {
   $('#hub-impian-sub').textContent    = `${APP.goals.filter(g=>g.saved<g.target).length} aktif`;
   $('#hub-hutang-sub').textContent    = formatRpC(APP.debts.filter(d=>!d.paid).reduce((s,d)=>s+d.amount,0));
   $('#hub-recurring-sub').textContent = `${APP.recurringTx.filter(r=>r.active).length} aktif`;
+  const dompetSub = $('#hub-dompet-sub');
+  if(dompetSub) dompetSub.textContent = `${APP.wallets.length} dompet`;
 }
 
 // ===================== RENDER IMPIAN =====================
@@ -684,7 +748,7 @@ function goalCardHTML(g, idx) {
     </div>
     <div class="goal-progress-row">
       <div class="goal-progress-label">Progress Tabungan</div>
-      <div class="goal-progress-pct" style="color:${isR?'var(--clr-income)':isO?'var(--clr-expense)':'var(--txt-primary)'}">${pct}%</div>
+      <div class="goal-progress-pct" style="color:${isR?'var(--income)':isO?'var(--expense)':'var(--txt-primary)'}">${pct}%</div>
     </div>
     <div class="goal-progress-bar"><div class="goal-progress-fill ${isO?'overdue':''}" style="width:${pct}%"></div></div>
     <div class="goal-amounts">
@@ -790,7 +854,7 @@ function debtCardHTML(d, idx) {
     <div class="debt-pay-progress">
       <div class="dpp-row">
         <div class="dpp-label">${isLent?'Diterima Kembali':'Sudah Dibayar'}: ${formatRp(paidAmt)} / ${formatRp(d.amount)}</div>
-        <div class="dpp-pct" style="color:${pct>=100?'var(--clr-income)':'var(--txt-secondary)'}">${pct}%</div>
+        <div class="dpp-pct" style="color:${pct>=100?'var(--income)':'var(--txt-secondary)'}">${pct}%</div>
       </div>
       <div class="dpp-bar"><div class="dpp-fill" style="width:${pct}%"></div></div>
     </div>` : '';
@@ -868,7 +932,329 @@ function renderRecurring() {
 }
 
 // ===================== NAVIGATION =====================
-const SUB_PAGES = ['impian','hutang','recurring','settings'];
+const SUB_PAGES = ['impian','hutang','recurring','settings','laporan','kalender','budget'];
+
+// ===================== RENDER LAPORAN =====================
+const LAPORAN_PERIOD = { month:1, '3month':3, '6month':6, year:12 };
+APP.laporanPeriod = APP.laporanPeriod || 'month';
+
+function getDateRangeLaporan(period) {
+  const now = new Date(); const y=now.getFullYear(), m=now.getMonth();
+  if (period==='month') {
+    return { from:`${y}-${String(m+1).padStart(2,'0')}-01`, to:todayStr(), label:'Bulan Ini', subLabel:'per minggu' };
+  } else if (period==='3month') {
+    const d=new Date(y,m-2,1);
+    return { from:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, to:todayStr(), label:'3 Bulan Terakhir', subLabel:'per bulan' };
+  } else if (period==='6month') {
+    const d=new Date(y,m-5,1);
+    return { from:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, to:todayStr(), label:'6 Bulan Terakhir', subLabel:'per bulan' };
+  } else {
+    return { from:`${y}-01-01`, to:todayStr(), label:`Tahun ${y}`, subLabel:'per bulan' };
+  }
+}
+
+// ===================== RENDER BUDGET MANAGER =====================
+APP.budgets    = APP.budgets    || []; // [{id, cat, limit, month:'2026-06'}]
+
+async function persistBudgets() {
+  await idbSet(STORE_DATA, 'budgets', APP.budgets);
+}
+
+function getBudgetMonth() {
+  const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+}
+
+function getBudgetMonthLabel() {
+  const mNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const n=new Date(); return `${mNames[n.getMonth()]} ${n.getFullYear()}`;
+}
+
+function renderBudget() {
+  const month = getBudgetMonth();
+  const budgets = APP.budgets.filter(b=>b.month===month);
+  const monthTxs = APP.transactions.filter(t=>t.date.startsWith(month)&&t.type==='expense');
+
+  // Totals
+  const totalLimit = budgets.reduce((s,b)=>s+b.limit,0);
+  const totalUsed  = budgets.reduce((s,b)=>{
+    const used=monthTxs.filter(t=>t.cat===b.cat).reduce((ss,t)=>ss+t.amount,0);
+    return s+Math.min(used,b.limit);
+  },0);
+  const totalActualUsed = budgets.reduce((s,b)=>{
+    return s+monthTxs.filter(t=>t.cat===b.cat).reduce((ss,t)=>ss+t.amount,0);
+  },0);
+  const totalRemain = totalLimit - totalActualUsed;
+  const pct = totalLimit>0 ? Math.round((totalActualUsed/totalLimit)*100) : 0;
+
+  const lbl=$('#budget-month-label'); if(lbl) lbl.textContent=getBudgetMonthLabel();
+  const bt=$('#budget-total'),bu=$('#budget-used'),br=$('#budget-remain');
+  if(bt) bt.textContent=formatRpC(totalLimit);
+  if(bu) bu.textContent=formatRpC(totalActualUsed);
+  if(br){ br.textContent=formatRpC(Math.max(0,totalRemain)); br.style.color=totalRemain<0?'var(--expense)':'var(--income)'; }
+
+  // Overall progress card
+  const clss = pct>=90?'danger':pct>=70?'warn':'safe';
+  const tips = pct>=90?'⚠️ Budget hampir habis! Hemat pengeluaran.':pct>=70?'💡 Sudah lebih dari 70%, perhatikan pengeluaran.':'✅ Budget masih aman, terus pertahankan!';
+  const boc=$('#budget-overall-card');
+  if(boc) boc.innerHTML=`
+    <div class="boc-row"><span class="boc-label">Total terpakai ${pct}%</span><span class="boc-pct" style="color:${pct>=90?'var(--expense)':pct>=70?'var(--warn)':'var(--income)'}">${formatRpC(totalActualUsed)} / ${formatRpC(totalLimit)}</span></div>
+    <div class="boc-bar"><div class="boc-fill ${clss}" style="width:${Math.min(pct,100)}%"></div></div>
+    <div class="boc-tips">${tips}</div>`;
+
+  // Budget list per category
+  const bl=$('#budget-list');
+  if(!bl) return;
+  if(!budgets.length){
+    bl.innerHTML=`<div class="empty-state"><div class="empty-icon">💰</div><p>Belum ada budget</p><span>Ketuk "+ Tambah" untuk mulai</span></div>`;
+  } else {
+    bl.innerHTML=budgets.map(b=>{
+      const cat=EXPENSE_CATS.find(c=>c.id===b.cat)||{name:b.cat,emoji:'💸'};
+      const used=monthTxs.filter(t=>t.cat===b.cat).reduce((s,t)=>s+t.amount,0);
+      const remain=b.limit-used;
+      const bpct=b.limit>0?Math.round((used/b.limit)*100):0;
+      const bcls=bpct>=90?'danger':bpct>=70?'warn':'safe';
+      const rbadge=bpct>=100?'over':bpct>=70?'warn':'ok';
+      const rlabel=bpct>=100?'OVER BUDGET':bpct>=70?'Hampir Habis':'Aman';
+      return `<div class="budget-item ${bpct>=90?'over':bpct>=70?'warn':''}">
+        <div class="bi-top">
+          <div class="bi-emoji">${cat.emoji}</div>
+          <div class="bi-info">
+            <div class="bi-cat">${cat.name}</div>
+            <div class="bi-used">${formatRpC(used)} dari ${formatRpC(b.limit)}</div>
+          </div>
+          <div class="bi-right">
+            <div class="bi-remain ${remain<0?'over':bpct>=70?'warn':'ok'}">${remain<0?'-':''}${formatRpC(Math.abs(remain))}</div>
+            <div class="bi-badge ${rbadge}">${rlabel}</div>
+          </div>
+        </div>
+        <div class="bi-bar"><div class="bi-bar-fill ${bcls}" style="width:${Math.min(bpct,100)}%"></div></div>
+        <div class="bi-actions">
+          <button class="bi-action-btn edit" data-bid="${b.id}">✏️ Edit</button>
+          <button class="bi-action-btn del" data-bid="${b.id}">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+    // listeners
+    $$('#budget-list .bi-action-btn.edit').forEach(btn=>btn.addEventListener('click',()=>openBudgetSheet(btn.dataset.bid)));
+    $$('#budget-list .bi-action-btn.del').forEach(btn=>btn.addEventListener('click',()=>{
+      APP.budgets=APP.budgets.filter(b=>b.id!==btn.dataset.bid);
+      persistBudgets(); renderBudget(); showToast('Budget dihapus','info');
+    }));
+  }
+
+  // Untracked spending (expense categories with no budget)
+  const budgetedCats=budgets.map(b=>b.cat);
+  const catMap={};
+  monthTxs.filter(t=>!budgetedCats.includes(t.cat)).forEach(t=>{
+    const cat=EXPENSE_CATS.find(c=>c.id===t.cat)||{name:'Lainnya',emoji:'💸'};
+    if(!catMap[t.cat]) catMap[t.cat]={name:cat.name,emoji:cat.emoji,total:0};
+    catMap[t.cat].total+=t.amount;
+  });
+  const untracked=Object.values(catMap).sort((a,b)=>b.total-a.total);
+  const utl=$('#budget-untracked-list');
+  if(utl){
+    if(!untracked.length){ utl.innerHTML=`<div style="font-size:0.78rem;color:var(--txt-muted);padding:6px 0">✅ Semua pengeluaran sudah punya budget</div>`; }
+    else { utl.innerHTML=untracked.map(c=>`
+      <div class="lap-cat-item">
+        <span class="lap-cat-emoji">${c.emoji}</span>
+        <div class="lap-cat-info">
+          <div class="lap-cat-name">${c.name}</div>
+          <div class="lap-cat-bar-bg" style="background:var(--warn-bg)"><div class="lap-cat-bar-fill" style="background:linear-gradient(90deg,var(--warn),#fbbf24);width:60%"></div></div>
+        </div>
+        <span class="lap-cat-amt" style="color:var(--warn)">${formatRpC(c.total)}</span>
+      </div>`).join(''); }
+  }
+}
+
+// Budget sheet
+APP._editBudgetId = null;
+function openBudgetSheet(editId=null) {
+  APP._editBudgetId = editId;
+  const month = getBudgetMonth();
+  const existing = editId ? APP.budgets.find(b=>b.id===editId) : null;
+  const title=$('#budget-sheet-title'); if(title) title.textContent=editId?'✏️ Edit Budget':'💰 Tambah Budget';
+
+  // Category pills — only expense cats not yet budgeted (or current cat if editing)
+  const budgetedCats=APP.budgets.filter(b=>b.month===month&&b.id!==editId).map(b=>b.cat);
+  const avail=EXPENSE_CATS.filter(c=>!budgetedCats.includes(c.id));
+  const bcs=$('#budget-cat-scroll');
+  if(bcs){
+    bcs.innerHTML=avail.map(c=>`<div class="cat-pill expense-cat${existing?.cat===c.id?' selected':''}" data-cat="${c.id}">
+      <span class="cat-emoji">${c.emoji}</span><span class="cat-label">${c.name}</span></div>`).join('');
+    $$('#budget-cat-scroll .cat-pill').forEach(p=>p.addEventListener('click',()=>{
+      $$('#budget-cat-scroll .cat-pill').forEach(x=>x.classList.remove('selected'));
+      p.classList.add('selected');
+    }));
+  }
+  const ba=$('#budget-amount'); if(ba) { ba.value=existing?existing.limit.toLocaleString('id'):''; formatAmountInput(ba); }
+  openSheet('budget');
+}
+
+function saveBudget() {
+  const month=getBudgetMonth();
+  const selCat=$('#budget-cat-scroll .cat-pill.selected');
+  if(!selCat) return showToast('Pilih kategori dulu','error');
+  const cat=selCat.dataset.cat;
+  const raw=$('#budget-amount').value.replace(/\D/g,'');
+  const limit=parseInt(raw)||0;
+  if(!limit) return showToast('Masukkan nominal budget','error');
+
+  if(APP._editBudgetId){
+    const b=APP.budgets.find(x=>x.id===APP._editBudgetId);
+    if(b){b.cat=cat;b.limit=limit;}
+  } else {
+    APP.budgets.push({id:uid(),cat,limit,month});
+  }
+  persistBudgets(); closeSheet('budget'); renderBudget();
+  showToast(APP._editBudgetId?'Budget diupdate ✅':'Budget ditambahkan ✅','success');
+  APP._editBudgetId=null;
+}
+
+// ===================== RENDER KALENDER (UPGRADED) =====================
+APP.calYear         = APP.calYear         || new Date().getFullYear();
+APP.calMonth        = APP.calMonth        || new Date().getMonth();
+APP.calSelectedDate = APP.calSelectedDate || todayStr();
+APP.reminders       = APP.reminders       || []; // [{id, date, title, amount, cat}]
+
+async function persistReminders() {
+  await idbSet(STORE_DATA, 'reminders', APP.reminders);
+}
+
+function renderKalender() {
+  const y=APP.calYear, m=APP.calMonth;
+  const monthNames=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const lbl=$('#cal-month-label'); if(lbl) lbl.textContent=monthNames[m]+' '+y;
+
+  const from=`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const lastDay=new Date(y,m+1,0).getDate();
+  const to=`${y}-${String(m+1).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  const monthTxs=APP.transactions.filter(t=>t.date>=from&&t.date<=to);
+  const monthRem=APP.reminders.filter(r=>r.date>=from&&r.date<=to);
+  const mInc=monthTxs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const mExp=monthTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+
+  const calMI=$('#cal-month-income'),calME=$('#cal-month-expense'),calMC=$('#cal-month-count');
+  if(calMI) calMI.textContent=formatRpC(mInc);
+  if(calME) calME.textContent=formatRpC(mExp);
+  if(calMC) calMC.textContent=monthRem.length; // show reminders count
+
+  // Build maps
+  const txByDate={}, remByDate={};
+  monthTxs.forEach(t=>{
+    if(!txByDate[t.date]) txByDate[t.date]={income:0,expense:0};
+    if(t.type==='income') txByDate[t.date].income+=t.amount;
+    if(t.type==='expense') txByDate[t.date].expense+=t.amount;
+  });
+  monthRem.forEach(r=>{
+    if(!remByDate[r.date]) remByDate[r.date]=0;
+    remByDate[r.date]++;
+  });
+
+  const firstDow=new Date(y,m,1).getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const daysInPrev=new Date(y,m,0).getDate();
+  const todayS=todayStr();
+  let html='';
+  for(let i=firstDow-1;i>=0;i--){
+    html+=`<div class="cal-day other-month"><div class="cal-day-num">${daysInPrev-i}</div></div>`;
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayData=txByDate[ds]; const hasRem=remByDate[ds]>0;
+    const isToday=ds===todayS, isSel=ds===APP.calSelectedDate;
+    let dots='';
+    if(dayData){
+      if(dayData.income>0)  dots+=`<div class="cal-dot income"></div>`;
+      if(dayData.expense>0) dots+=`<div class="cal-dot expense"></div>`;
+    }
+    if(hasRem) dots+=`<div class="cal-dot reminder"></div>`;
+    html+=`<div class="cal-day${isToday?' today':''}${isSel?' selected':''}" data-date="${ds}">
+      <div class="cal-day-num">${d}</div>
+      <div class="cal-day-dots">${dots}</div>
+    </div>`;
+  }
+  const total=firstDow+daysInMonth;
+  const remainder=total%7===0?0:7-(total%7);
+  for(let d=1;d<=remainder;d++){
+    html+=`<div class="cal-day other-month"><div class="cal-day-num">${d}</div></div>`;
+  }
+  const calDays=$('#cal-days'); if(calDays) calDays.innerHTML=html;
+  $$('#cal-days .cal-day:not(.other-month)').forEach(el=>{
+    el.addEventListener('click',()=>{
+      APP.calSelectedDate=el.dataset.date;
+      $$('#cal-days .cal-day').forEach(e=>e.classList.remove('selected'));
+      el.classList.add('selected');
+      renderKalenderDetail();
+    });
+  });
+  renderKalenderDetail();
+}
+
+function renderKalenderDetail() {
+  const ds=APP.calSelectedDate;
+  const label=$('#cal-selected-label');
+  if(label) label.textContent = ds ? formatDate(ds) : 'Pilih tanggal';
+  const list=$('#cal-agenda-list'); if(!list) return;
+  if(!ds){ list.innerHTML=`<div class="empty-state" style="padding:16px 0"><div class="empty-icon">📅</div><p>Pilih tanggal di kalender</p></div>`; return; }
+
+  const dayTxs=APP.transactions.filter(t=>t.date===ds);
+  const dayRems=APP.reminders.filter(r=>r.date===ds);
+  const total=dayTxs.length+dayRems.length;
+
+  if(!total){ list.innerHTML=`<div class="empty-state" style="padding:14px 0"><div class="empty-icon">📭</div><p>Tidak ada agenda</p><span>Ketuk "+ Pengingat" atau "+ Catat"</span></div>`; return; }
+
+  // Reminders first
+  const remHTML=dayRems.map(r=>`
+    <div class="cal-reminder-item">
+      <div class="cal-reminder-icon">🔔</div>
+      <div class="cal-reminder-info">
+        <div class="cal-reminder-title">${r.title}</div>
+        ${r.amount?`<div class="cal-reminder-amt">${formatRpC(r.amount)}</div>`:''}
+      </div>
+      <button class="cal-reminder-del" data-rid="${r.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+    </div>`).join('');
+
+  // Transactions
+  const txHTML=dayTxs.map(t=>{
+    const cats=t.type==='income'?INCOME_CATS:EXPENSE_CATS;
+    const cat=cats.find(c=>c.id===t.cat)||{emoji:'💸',name:t.cat};
+    return `<div class="cal-tx-item">
+      <div class="cal-tx-dot ${t.type}">${cat.emoji}</div>
+      <div class="cal-tx-info">
+        <div class="cal-tx-desc">${t.desc||'Transaksi'}</div>
+        <div class="cal-tx-cat">${cat.name}</div>
+      </div>
+      <div class="cal-tx-amt ${t.type}">${t.type==='income'?'+':'-'}${formatRpC(t.amount)}</div>
+    </div>`;
+  }).join('');
+
+  list.innerHTML=remHTML+txHTML;
+
+  $$('#cal-agenda-list .cal-reminder-del').forEach(btn=>btn.addEventListener('click',()=>{
+    APP.reminders=APP.reminders.filter(r=>r.id!==btn.dataset.rid);
+    persistReminders(); renderKalender(); showToast('Pengingat dihapus','info');
+  }));
+}
+
+function openReminderSheet() {
+  if(!APP.calSelectedDate) return showToast('Pilih tanggal dulu','error');
+  const dl=$('#reminder-date-label');
+  if(dl) dl.textContent='Tanggal: '+formatDate(APP.calSelectedDate);
+  const rt=$('#reminder-title'); if(rt) rt.value='';
+  const ra=$('#reminder-amount'); if(ra) ra.value='';
+  openSheet('reminder');
+}
+
+function saveReminder() {
+  const title=$('#reminder-title')?.value?.trim();
+  if(!title) return showToast('Isi judul pengingat','error');
+  const raw=$('#reminder-amount')?.value?.replace(/\D/g,'')||'0';
+  const cat=$('#reminder-cat')?.value||'bills';
+  APP.reminders.push({ id:uid(), date:APP.calSelectedDate, title, amount:parseInt(raw)||0, cat });
+  persistReminders(); closeSheet('reminder'); renderKalender();
+  showToast('🔔 Pengingat ditambahkan','success');
+}
+
 
 function navigateTo(page, fromNav=false) {
   if (APP.currentPage === page) return;
@@ -879,10 +1265,13 @@ function navigateTo(page, fromNav=false) {
 
   const isSubPage = SUB_PAGES.includes(page);
   $$('.nav-item').forEach(n => {
-    n.classList.toggle('active', n.dataset.page===page || (isSubPage && n.dataset.page==='lainnya'));
+    const np = n.dataset.page;
+    const isActive = np===page
+      || (isSubPage && np==='lainnya' && !['laporan','kalender','budget'].includes(page));
+    n.classList.toggle('active', isActive);
   });
 
-  const titles = {dashboard:'Dashboard',analitik:'Analitik',riwayat:'Riwayat',dompet:'Dompet',lainnya:'Lainnya',impian:'Impian',hutang:'Hutang',recurring:'Transaksi Berulang',settings:'Pengaturan'};
+  const titles = {dashboard:'Dashboard',analitik:'Analitik & Laporan',riwayat:'Transaksi',dompet:'Dompet',lainnya:'Lainnya',impian:'Impian',hutang:'Hutang',recurring:'Berulang',settings:'Pengaturan',laporan:'Analitik & Laporan',kalender:'Kalender Keuangan',budget:'Budget Manager'};
   $('#page-title').textContent = titles[page] || '';
 
   const showBack = isSubPage;
@@ -891,7 +1280,7 @@ function navigateTo(page, fromNav=false) {
 
   const fab = $('#fab-btn');
   fab.className = 'fab';
-  if      (page==='settings' || page==='lainnya') fab.style.display = 'none';
+  if      (page==='settings' || page==='lainnya' || page==='laporan' || page==='kalender' || page==='dashboard' || page==='budget') fab.style.display = 'none';
   else if (page==='dompet')  { fab.style.display=''; fab.classList.add('wallet-fab'); }
   else if (page==='hutang')  { fab.style.display=''; fab.classList.add('expense-fab'); }
   else    { fab.style.display=''; }
@@ -904,6 +1293,9 @@ function navigateTo(page, fromNav=false) {
   else if (page==='impian')    renderImpian();
   else if (page==='hutang')    renderHutang();
   else if (page==='recurring') renderRecurring();
+  else if (page==='laporan')   renderLaporan();
+  else if (page==='kalender')  renderKalender();
+  else if (page==='budget')    renderBudget();
   if (page==='settings') {
     const last = getAutoBackupLastDate();
     const el = $('#backup-last-desc');
@@ -919,7 +1311,7 @@ function closeSheet(name) { $(`#${name}-backdrop`)?.classList.remove('open'); $(
 function openTxSheet(editId=null) {
   APP.editingTxId = editId;
   const tx   = editId ? APP.transactions.find(t=>t.id===editId) : null;
-  const type = tx?.type || 'income';
+  const type = tx?.type || APP.selectedType || 'income';
   $('#addtx-title').textContent = editId ? '✏️ Edit Transaksi' : '➕ Catat Transaksi';
   setTxType(type);
   $('#tx-amount').value = tx ? tx.amount.toLocaleString('id-ID') : '';
@@ -1576,9 +1968,12 @@ async function init() {
     $$('#dash-pills .pill').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active'); APP.dashFilter=btn.dataset.filter; renderDashboard();
   }));
-  $('#see-all-btn').addEventListener('click',    () => navigateTo('riwayat'));
-  $('#qc-analitik').addEventListener('click',    () => navigateTo('analitik'));
-  $('#qc-impian-dash').addEventListener('click', () => navigateTo('impian'));
+  $('#see-all-btn').addEventListener('click', () => navigateTo('riwayat'));
+
+  // QUICK ACTIONS on dashboard
+  $('#qa-income')?.addEventListener('click',   () => { APP.selectedType='income';  openTxSheet(); });
+  $('#qa-expense')?.addEventListener('click',  () => { APP.selectedType='expense'; openTxSheet(); });
+  $('#qa-transfer')?.addEventListener('click', () => openTransferSheet());
 
   // ANALITIK FILTER
   $$('#analitik-pills .pill').forEach(btn => btn.addEventListener('click', () => {
@@ -1601,11 +1996,44 @@ async function init() {
     btn.classList.add('active'); APP.debtFilter=btn.dataset.dfilter; renderHutang();
   }));
 
+  // LAPORAN pills (now inside analitik) — reuse analitik pills
+  $('#btn-export-pdf')?.addEventListener('click', exportJSON);
+
+  // BUDGET
+  $('#btn-add-budget')?.addEventListener('click', ()=>openBudgetSheet());
+  $('#budget-submit')?.addEventListener('click', saveBudget);
+  $('#budget-cancel')?.addEventListener('click', ()=>closeSheet('budget'));
+  $('#budget-backdrop')?.addEventListener('click', ()=>closeSheet('budget'));
+
+  // REMINDER (kalender)
+  $('#cal-add-reminder-btn')?.addEventListener('click', openReminderSheet);
+  $('#reminder-submit')?.addEventListener('click', saveReminder);
+  $('#reminder-cancel')?.addEventListener('click', ()=>closeSheet('reminder'));
+  $('#reminder-backdrop')?.addEventListener('click', ()=>closeSheet('reminder'));
+
+  // Format amount input for budget & reminder
+  ['budget-amount','reminder-amount'].forEach(id=>{
+    const el=$('#'+id); if(el) el.addEventListener('input',()=>formatAmountInput(el));
+  });
+
+  // KALENDER
+  $('#cal-prev')?.addEventListener('click', () => {
+    APP.calMonth--; if(APP.calMonth<0){APP.calMonth=11;APP.calYear--;} renderKalender();
+  });
+  $('#cal-next')?.addEventListener('click', () => {
+    APP.calMonth++; if(APP.calMonth>11){APP.calMonth=0;APP.calYear++;} renderKalender();
+  });
+  $('#cal-add-tx-btn')?.addEventListener('click', () => {
+    if(APP.calSelectedDate){ openTxSheet(); $('#tx-date').value=APP.calSelectedDate; }
+  });
+
   // LAINNYA HUB
-  $('#hub-impian').addEventListener('click',    () => navigateTo('impian'));
-  $('#hub-hutang').addEventListener('click',    () => navigateTo('hutang'));
-  $('#hub-recurring').addEventListener('click', () => navigateTo('recurring'));
-  $('#hub-settings').addEventListener('click',  () => navigateTo('settings'));
+  $('#hub-dompet')?.addEventListener('click',    () => navigateTo('dompet'));
+  $('#hub-kalender')?.addEventListener('click',  () => navigateTo('kalender'));
+  $('#hub-impian').addEventListener('click',     () => navigateTo('impian'));
+  $('#hub-hutang').addEventListener('click',     () => navigateTo('hutang'));
+  $('#hub-recurring').addEventListener('click',  () => navigateTo('recurring'));
+  $('#hub-settings').addEventListener('click',   () => navigateTo('settings'));
 
   // WALLET SHEET
   $('#wallet-submit').addEventListener('click',  submitWallet);

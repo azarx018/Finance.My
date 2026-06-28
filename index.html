@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-  <meta name="theme-color" content="#0a0a0f"/>
+  <meta name="theme-color" content="#ffffff"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="Azar Finance"/>
@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
 </head>
-<body class="dark-mode">
+<body>
 
 <!-- ===== SPLASH ===== -->
 <div id="splash">
@@ -73,36 +73,70 @@
       <div class="balance-card">
         <div class="balance-label">Total Kekayaan</div>
         <div class="balance-amount" id="net-worth-display">Rp 0</div>
-        <div class="balance-period">Di semua dompet &amp; rekening</div>
+        <div class="balance-period">
+          <span>Di semua dompet &amp; rekening</span>
+          <span class="balance-badge" id="dash-wallet-count">0 dompet</span>
+        </div>
         <div class="balance-stats">
           <div class="stat-item income">
             <div class="stat-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L9 13.586V3a1 1 0 012 0v10.586l3.293-3.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z" clip-rule="evenodd"/></svg></div>
-            <div><div class="stat-label">Bulan Ini</div><div class="stat-val" id="dash-income">Rp 0</div></div>
+            <div><div class="stat-label">Pemasukan</div><div class="stat-val" id="dash-income">Rp 0</div></div>
           </div>
-          <div class="divider-v"></div>
           <div class="stat-item expense">
             <div class="stat-icon"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L11 6.414V17a1 1 0 11-2 0V6.414L5.707 9.707a1 1 0 01-1.414-1.414l5-5A1 1 0 0110 3z" clip-rule="evenodd"/></svg></div>
-            <div><div class="stat-label">Bulan Ini</div><div class="stat-val" id="dash-expense">Rp 0</div></div>
+            <div><div class="stat-label">Pengeluaran</div><div class="stat-val" id="dash-expense">Rp 0</div></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Month Summary -->
+      <div class="month-summary">
+        <div class="ms-card">
+          <div class="ms-label">Tabungan Bulan Ini</div>
+          <div class="ms-val income" id="dash-savings">Rp 0</div>
+          <div class="ms-sub" id="dash-savings-rate">Savings rate: 0%</div>
+        </div>
+        <div class="ms-card">
+          <div class="ms-label">Pengeluaran Hari Ini</div>
+          <div class="ms-val expense" id="dash-today-exp">Rp 0</div>
+          <div class="ms-sub" id="dash-today-tx">0 transaksi</div>
+        </div>
+      </div>
+
+      <!-- Savings Rate Ring -->
+      <div class="savings-bar-card">
+        <div class="sbc-left">
+          <div class="sbc-title">Savings Rate Bulan Ini</div>
+          <div class="sbc-rate" id="dash-sbc-rate">0%</div>
+          <div class="sbc-desc" id="dash-sbc-desc">Mulai catat transaksi</div>
+        </div>
+        <div class="sbc-ring">
+          <svg viewBox="0 0 52 52">
+            <circle class="sbc-ring-bg" cx="26" cy="26" r="22"/>
+            <circle class="sbc-ring-fill" id="dash-ring-fill" cx="26" cy="26" r="22"
+              stroke-dasharray="138.2" stroke-dashoffset="138.2"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <div class="qa-btn income" id="qa-income">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <span class="qa-label">Pemasukan</span>
+        </div>
+        <div class="qa-btn expense" id="qa-expense">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+          <span class="qa-label">Pengeluaran</span>
+        </div>
+        <div class="qa-btn transfer" id="qa-transfer">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg></div>
+          <span class="qa-label">Transfer</span>
         </div>
       </div>
 
       <!-- Wallet row -->
       <div class="wallet-scroll-row" id="wallet-scroll-row"></div>
-
-      <!-- Quick cards -->
-      <div class="quick-row">
-        <div class="quick-card" id="qc-analitik">
-          <span class="qc-emoji">📊</span>
-          <div class="qc-info"><div class="qc-label">Tabungan Bulan Ini</div><div class="qc-val green" id="qc-savings">Rp 0</div></div>
-          <svg class="qc-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-        <div class="quick-card" id="qc-impian-dash">
-          <span class="qc-emoji">⭐</span>
-          <div class="qc-info"><div class="qc-label">Impian Aktif</div><div class="qc-val" id="qc-impian-n">0</div></div>
-          <svg class="qc-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>
-      </div>
 
       <!-- Filter pills -->
       <div class="filter-pills" id="dash-pills">
@@ -123,6 +157,17 @@
   <!-- ======== ANALITIK ======== -->
   <section id="page-analitik" class="page">
     <div class="scroll-area">
+      <!-- Header summary card -->
+      <div class="laporan-header-card">
+        <div class="lhc-period" id="an-period-label">Bulan Ini</div>
+        <div class="lhc-title">Analitik & Laporan</div>
+        <div class="lhc-stats">
+          <div class="lhc-stat"><div class="lhc-stat-label">Savings Rate</div><div class="lhc-stat-val" id="an-savrate">0%</div></div>
+          <div class="lhc-stat"><div class="lhc-stat-label">Selisih</div><div class="lhc-stat-val" id="an-net">Rp 0</div></div>
+          <div class="lhc-stat"><div class="lhc-stat-label">Transaksi</div><div class="lhc-stat-val" id="an-txcount">0</div></div>
+        </div>
+      </div>
+
       <!-- Period Selector -->
       <div class="filter-pills" id="analitik-pills">
         <button class="pill active" data-aperiod="month">Bulan Ini</button>
@@ -131,38 +176,50 @@
         <button class="pill" data-aperiod="year">Tahun Ini</button>
       </div>
 
-      <!-- Summary Stats -->
+      <!-- Summary Stats 2x2 -->
       <div class="analitik-stats-grid" id="analitik-stats"></div>
 
-      <!-- Savings Rate -->
+      <!-- Savings Rate visual -->
       <div class="savings-rate-card" id="savings-rate-card"></div>
 
-      <!-- Bar Chart: Income vs Expense -->
+      <!-- Bar Chart -->
       <div class="chart-card">
         <div class="chart-title">📈 Pemasukan vs Pengeluaran</div>
         <div class="chart-subtitle" id="bar-chart-subtitle">per bulan</div>
-        <div class="chart-wrap">
-          <canvas id="chart-bar" style="width:100%;height:180px;"></canvas>
-        </div>
+        <div class="chart-wrap"><canvas id="chart-bar" style="width:100%;height:180px;"></canvas></div>
         <div class="chart-legend">
           <span class="legend-item income">■ Pemasukan</span>
           <span class="legend-item expense">■ Pengeluaran</span>
         </div>
       </div>
 
-      <!-- Donut Chart: Categories -->
+      <!-- Laporan summary 2x2 -->
+      <div class="laporan-summary">
+        <div class="lap-sum-card"><div class="lsc-label">Total Pemasukan</div><div class="lsc-val income" id="lap-income">Rp 0</div><div class="lsc-sub" id="lap-income-count">0 transaksi</div></div>
+        <div class="lap-sum-card"><div class="lsc-label">Total Pengeluaran</div><div class="lsc-val expense" id="lap-expense">Rp 0</div><div class="lsc-sub" id="lap-expense-count">0 transaksi</div></div>
+        <div class="lap-sum-card"><div class="lsc-label">Selisih Bersih</div><div class="lsc-val info" id="lap-net">Rp 0</div><div class="lsc-sub">Pemasukan − Pengeluaran</div></div>
+        <div class="lap-sum-card"><div class="lsc-label">Rata-rata/Hari</div><div class="lsc-val warn" id="lap-avg">Rp 0</div><div class="lsc-sub">Pengeluaran harian</div></div>
+      </div>
+
+      <!-- Donut Chart -->
       <div class="chart-card">
         <div class="chart-title">🍩 Pengeluaran per Kategori</div>
-        <div class="chart-subtitle" id="donut-period-label">bulan ini</div>
+        <div class="chart-subtitle" id="donut-period-label">periode dipilih</div>
         <div class="chart-donut-wrap">
           <canvas id="chart-donut" style="width:160px;height:160px;flex-shrink:0;"></canvas>
           <div class="donut-legend" id="donut-legend"></div>
         </div>
       </div>
 
-      <!-- Day of week heatmap -->
+      <!-- Category breakdown list -->
+      <div class="lap-cat-list">
+        <div class="lap-cat-title">🏆 Breakdown Pengeluaran</div>
+        <div id="lap-cat-items"></div>
+      </div>
+
+      <!-- Day heatmap -->
       <div class="chart-card">
-        <div class="chart-title">📅 Pola Pengeluaran Harian</div>
+        <div class="chart-title">📅 Pola Pengeluaran per Hari</div>
         <div class="day-heatmap" id="day-heatmap"></div>
       </div>
 
@@ -177,6 +234,12 @@
         <div class="chart-title">📊 Rata-rata Bulanan</div>
         <div id="avg-stats"></div>
       </div>
+
+      <!-- Export -->
+      <button class="export-pdf-btn" id="btn-export-pdf" style="margin-bottom:8px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Data (JSON)
+      </button>
     </div>
   </section>
 
@@ -223,13 +286,23 @@
   <section id="page-lainnya" class="page">
     <div class="scroll-area">
       <div class="hub-grid">
+        <div class="hub-card" id="hub-dompet">
+          <div class="hub-icon" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">💳</div>
+          <div class="hub-name">Dompet</div>
+          <div class="hub-sub" id="hub-dompet-sub">0 dompet</div>
+        </div>
+        <div class="hub-card" id="hub-kalender">
+          <div class="hub-icon" style="background:linear-gradient(135deg,#0891b2,#06b6d4)">📅</div>
+          <div class="hub-name">Kalender</div>
+          <div class="hub-sub">Agenda keuangan</div>
+        </div>
         <div class="hub-card" id="hub-impian">
           <div class="hub-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">⭐</div>
           <div class="hub-name">Impian</div>
           <div class="hub-sub" id="hub-impian-sub">0 aktif</div>
         </div>
         <div class="hub-card" id="hub-hutang">
-          <div class="hub-icon" style="background:linear-gradient(135deg,#f43f5e,#e11d48)">💳</div>
+          <div class="hub-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)">💸</div>
           <div class="hub-name">Hutang</div>
           <div class="hub-sub red" id="hub-hutang-sub">Rp 0</div>
         </div>
@@ -301,6 +374,88 @@
     </div>
   </section>
 
+  <!-- ======== LAPORAN ======== -->
+  <!-- ======== BUDGET MANAGER ======== -->
+  <section id="page-laporan" class="page">
+    <div class="scroll-area">
+      <!-- Budget header -->
+      <div class="laporan-header-card">
+        <div class="lhc-period" id="budget-month-label">Juni 2026</div>
+        <div class="lhc-title">Budget Manager</div>
+        <div class="lhc-stats">
+          <div class="lhc-stat"><div class="lhc-stat-label">Total Budget</div><div class="lhc-stat-val" id="budget-total">Rp 0</div></div>
+          <div class="lhc-stat"><div class="lhc-stat-label">Terpakai</div><div class="lhc-stat-val" id="budget-used">Rp 0</div></div>
+          <div class="lhc-stat"><div class="lhc-stat-label">Sisa</div><div class="lhc-stat-val" id="budget-remain">Rp 0</div></div>
+        </div>
+      </div>
+
+      <!-- Overall progress -->
+      <div class="budget-overall-card" id="budget-overall-card"></div>
+
+      <!-- Budget list -->
+      <div class="section-header" style="margin-bottom:10px;">
+        <span class="section-title">Budget per Kategori</span>
+        <button class="see-all-btn" id="btn-add-budget">+ Tambah</button>
+      </div>
+      <div id="budget-list"></div>
+
+      <!-- Unbudgeted spending -->
+      <div class="chart-card" id="budget-untracked-card" style="margin-top:10px;">
+        <div class="chart-title">📦 Pengeluaran Tanpa Budget</div>
+        <div id="budget-untracked-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======== KALENDER ======== -->
+  <section id="page-kalender" class="page">
+    <div class="scroll-area">
+      <!-- Month navigation -->
+      <div class="cal-month-nav">
+        <button class="cal-nav-btn" id="cal-prev">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <span class="cal-month-label" id="cal-month-label">Juni 2026</span>
+        <button class="cal-nav-btn" id="cal-next">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+
+      <!-- Month summary -->
+      <div class="cal-summary">
+        <div class="cal-sum-card"><div class="cal-sum-label">Pemasukan</div><div class="cal-sum-val income" id="cal-month-income">Rp 0</div></div>
+        <div class="cal-sum-card"><div class="cal-sum-label">Pengeluaran</div><div class="cal-sum-val expense" id="cal-month-expense">Rp 0</div></div>
+        <div class="cal-sum-card"><div class="cal-sum-label">Pengingat</div><div class="cal-sum-val" id="cal-month-count">0</div></div>
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="calendar-grid">
+        <div class="cal-dow-row">
+          <div class="cal-dow">Min</div><div class="cal-dow">Sen</div><div class="cal-dow">Sel</div>
+          <div class="cal-dow">Rab</div><div class="cal-dow">Kam</div><div class="cal-dow">Jum</div><div class="cal-dow">Sab</div>
+        </div>
+        <div class="cal-days" id="cal-days"></div>
+      </div>
+
+      <!-- Selected day detail -->
+      <div class="cal-day-selected-detail" id="cal-day-detail">
+        <div class="cdsd-title">
+          <span id="cal-selected-label">Pilih tanggal</span>
+          <div style="display:flex;gap:6px;">
+            <button class="cdsd-add-btn" id="cal-add-reminder-btn" style="background:rgba(245,158,11,0.15);color:#d97706;">+ Pengingat</button>
+            <button class="cdsd-add-btn" id="cal-add-tx-btn">+ Catat</button>
+          </div>
+        </div>
+        <div class="cal-agenda-list" id="cal-agenda-list">
+          <div class="empty-state" style="padding:16px 0">
+            <div class="empty-icon">📅</div>
+            <p>Pilih tanggal di kalender</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ======== SETTINGS ======== -->
   <section id="page-settings" class="page">
     <div class="scroll-area">
@@ -333,6 +488,7 @@
         <svg viewBox="0 0 48 48" fill="none" width="36" height="36"><rect x="4" y="4" width="40" height="40" rx="14" fill="url(#gi2)"/><circle cx="24" cy="24" r="6" fill="white" opacity="0.9"/><defs><linearGradient id="gi2" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
         <div class="app-info-name">Azar Finance</div>
         <div class="app-info-ver">v3.0 · PWA Ready</div>
+        <div class="app-info-badge">Update v2 · IndexedDB · Laporan · Kalender</div>
       </div>
     </div>
   </section>
@@ -345,23 +501,23 @@
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-page="dashboard" aria-label="Home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span>Home</span>
+    </button>
+    <button class="nav-item" data-page="riwayat" aria-label="Transaksi">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span>Transaksi</span>
     </button>
     <button class="nav-item" data-page="analitik" aria-label="Analitik">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span>Analitik</span>
     </button>
-    <button class="nav-item" data-page="riwayat" aria-label="Riwayat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      <span>Riwayat</span>
-    </button>
-    <button class="nav-item" data-page="dompet" aria-label="Dompet">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8a2 2 0 00-2 2v2h12V5a2 2 0 00-2-2z"/><circle cx="17" cy="14" r="1" fill="currentColor"/></svg>
-      <span>Dompet</span>
+    <button class="nav-item" data-page="laporan" aria-label="Budget">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>
+      <span>Budget</span>
     </button>
     <button class="nav-item" data-page="lainnya" aria-label="Lainnya">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
       <span>Lainnya</span>
     </button>
   </nav>
@@ -633,6 +789,54 @@
   </div>
   <button class="submit-btn expense-mode" id="pay-submit">Proses Pembayaran</button>
   <button class="cancel-btn" id="pay-cancel" style="margin-top:10px;">Batal</button>
+  <div style="height:8px;"></div>
+</div>
+
+<!-- ADD BUDGET SHEET -->
+<div class="sheet-backdrop" id="budget-backdrop"></div>
+<div class="bottom-sheet" id="sheet-budget">
+  <div class="sheet-drag"></div>
+  <h3 class="sheet-title" id="budget-sheet-title">💰 Tambah Budget</h3>
+  <div class="input-group mt4">
+    <label class="input-label">Kategori</label>
+    <div class="cat-scroll" id="budget-cat-scroll"></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Batas Budget (Rp)</label>
+    <div class="amount-wrapper"><span class="currency-prefix">Rp</span><input type="text" id="budget-amount" class="amount-input" placeholder="0" inputmode="numeric"/></div>
+  </div>
+  <button class="submit-btn" id="budget-submit">Simpan Budget</button>
+  <button class="cancel-btn" id="budget-cancel" style="margin-top:10px;">Batal</button>
+  <div style="height:8px;"></div>
+</div>
+
+<!-- ADD REMINDER SHEET -->
+<div class="sheet-backdrop" id="reminder-backdrop"></div>
+<div class="bottom-sheet" id="sheet-reminder">
+  <div class="sheet-drag"></div>
+  <h3 class="sheet-title">🔔 Tambah Pengingat</h3>
+  <p class="sheet-sub" id="reminder-date-label">Tanggal: -</p>
+  <div class="input-group mt4">
+    <label class="input-label">Judul Pengingat</label>
+    <input type="text" id="reminder-title" class="text-input" placeholder="Bayar listrik, cicilan motor..." autocomplete="off"/>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Nominal (Opsional)</label>
+    <div class="amount-wrapper"><span class="currency-prefix">Rp</span><input type="text" id="reminder-amount" class="amount-input" placeholder="0" inputmode="numeric"/></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Kategori</label>
+    <select id="reminder-cat" class="text-input select-input">
+      <option value="bills">💡 Tagihan</option>
+      <option value="home">🏠 Rumah</option>
+      <option value="health">💊 Kesehatan</option>
+      <option value="education">📚 Pendidikan</option>
+      <option value="transport">🚗 Transport</option>
+      <option value="other_exp">💸 Lainnya</option>
+    </select>
+  </div>
+  <button class="submit-btn" id="reminder-submit">Simpan Pengingat</button>
+  <button class="cancel-btn" id="reminder-cancel" style="margin-top:10px;">Batal</button>
   <div style="height:8px;"></div>
 </div>
 
