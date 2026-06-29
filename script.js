@@ -21,7 +21,7 @@ const WALLET_EMOJIS = ['👛','💼','🏦','💳','📱','💵','🪙','🏧','
 
 // ===================== STATE =====================
 const APP = {
-  transactions:[],goals:[],debts:[],wallets:[],recurringTx:[],
+  transactions:[],goals:[],debts:[],wallets:[],recurringTx:[],budgets:[],reminders:[],
   currentPage:'dashboard', prevPage:null,
   editingTxId:null, editingGoalId:null, editingDebtId:null,
   editingWalletId:null, editingRecId:null, savingGoalId:null,
@@ -528,24 +528,14 @@ function renderAnalitik() {
   const days = r ? Math.max(1,Math.ceil((new Date(r.to)-new Date(r.from))/86400000)) : 30;
   const avgDay = Math.round(expense/days);
 
-  // Update header cards
+  // Header card
   const anPL=$('#an-period-label'),anSR=$('#an-savrate'),anNet=$('#an-net'),anTx=$('#an-txcount');
   if(anPL) anPL.textContent = prd==='month'?'Bulan Ini':prd==='3month'?'3 Bulan Terakhir':prd==='6month'?'6 Bulan Terakhir':'Tahun Ini';
   if(anSR) anSR.textContent = savRate+'%';
   if(anNet){ anNet.textContent=formatRpC(saldo); anNet.style.color=saldo>=0?'rgba(255,255,255,0.9)':'#fca5a5'; }
   if(anTx) anTx.textContent = allTxs.length;
 
-  // Laporan summary 4 cards (now inside analitik)
-  const lapIncome=$('#lap-income'),lapExp=$('#lap-expense'),lapNet=$('#lap-net'),lapAvg=$('#lap-avg');
-  const lapInC=$('#lap-income-count'),lapExC=$('#lap-expense-count');
-  if(lapIncome) lapIncome.textContent=formatRp(income);
-  if(lapExp) lapExp.textContent=formatRp(expense);
-  if(lapNet){ lapNet.textContent=formatRp(saldo); lapNet.style.color=saldo>=0?'var(--income)':'var(--expense)'; }
-  if(lapAvg) lapAvg.textContent=formatRpC(avgDay)+'/hari';
-  if(lapInC) lapInC.textContent=allTxs.filter(t=>t.type==='income').length+' transaksi';
-  if(lapExC) lapExC.textContent=allTxs.filter(t=>t.type==='expense').length+' transaksi';
-
-  // Category breakdown for laporan section
+  // Category breakdown (donut + bar list, digabung)
   const catMap={};
   list.filter(t=>t.type==='expense').forEach(t=>{
     const cat=EXPENSE_CATS.find(c=>c.id===t.catId)||{name:'Lainnya',emoji:'💸'};
@@ -563,7 +553,7 @@ function renderAnalitik() {
         <div class="lap-cat-bar-bg"><div class="lap-cat-bar-fill" style="width:${Math.round((c.total/maxCat)*100)}%"></div></div>
       </div>
       <span class="lap-cat-amt">${formatRpC(c.total)}</span>
-    </div>`).join(''):'<div style="color:var(--txt-muted);font-size:0.8rem;padding:8px 0">Belum ada pengeluaran</div>';
+    </div>`).join(''):'<div style="color:var(--txt-muted);font-size:0.8rem;padding:6px 0">Belum ada pengeluaran</div>';
 
   const avgExp = getAvgMonthly('expense',3);
 
@@ -577,7 +567,6 @@ function renderAnalitik() {
   const expChg   = lastMExp ? Math.round((thisMExp-lastMExp)/lastMExp*100) : 0;
   const expChgTxt= expChg>0 ? `▲ ${expChg}% vs bulan lalu` : expChg<0 ? `▼ ${Math.abs(expChg)}% vs bulan lalu` : 'Sama dgn bulan lalu';
   const expCls   = expChg>0 ? 'down' : expChg<0 ? 'up' : '';
-
   $('#analitik-stats').innerHTML = `
     <div class="analitik-stat-card"><div class="asc-label">Pemasukan</div><div class="asc-val green">${formatRpC(income)}</div><div class="asc-sub">periode dipilih</div></div>
     <div class="analitik-stat-card"><div class="asc-label">Pengeluaran</div><div class="asc-val red">${formatRpC(expense)}</div><div class="asc-sub ${expCls}">${expChgTxt}</div></div>
@@ -647,13 +636,6 @@ function renderAnalitik() {
       </div>`).join('')
     : `<div style="color:var(--txt-muted);font-size:0.8rem;padding:8px 0">Belum ada pengeluaran</div>`;
 
-  // Averages row
-  const avgExpD = Math.round(avgExp/30);
-  $('#avg-stats').innerHTML = `<div class="avg-stats-row">
-    <div class="avg-item"><div class="avg-val green">${formatRpC(avgInc)}</div><div class="avg-label">Pemasukan/bln</div></div>
-    <div class="avg-item"><div class="avg-val red">${formatRpC(avgExp)}</div><div class="avg-label">Pengeluaran/bln</div></div>
-    <div class="avg-item"><div class="avg-val orange">${formatRpC(avgExpD)}</div><div class="avg-label">Pengeluaran/hari</div></div>
-  </div>`;
 }
 
 // ===================== RENDER RIWAYAT =====================
@@ -954,7 +936,6 @@ function getDateRangeLaporan(period) {
 }
 
 // ===================== RENDER BUDGET MANAGER =====================
-APP.budgets    = APP.budgets    || []; // [{id, cat, limit, month:'2026-06'}]
 
 async function persistBudgets() {
   await idbSet(STORE_DATA, 'budgets', APP.budgets);
@@ -1114,7 +1095,6 @@ function saveBudget() {
 APP.calYear         = APP.calYear         || new Date().getFullYear();
 APP.calMonth        = APP.calMonth        || new Date().getMonth();
 APP.calSelectedDate = APP.calSelectedDate || todayStr();
-APP.reminders       = APP.reminders       || []; // [{id, date, title, amount, cat}]
 
 async function persistReminders() {
   await idbSet(STORE_DATA, 'reminders', APP.reminders);
@@ -1811,6 +1791,9 @@ function refreshCurrentPage() {
   else if (p==='riwayat')   renderRiwayat();
   else if (p==='analitik')  renderAnalitik();
   else if (p==='dompet')    renderDompet();
+  else if (p==='laporan')   renderBudget();
+  else if (p==='impian')    renderImpian();
+  else if (p==='hutang')    renderHutang();
 }
 
 // ===================== EXPORT / IMPORT =====================

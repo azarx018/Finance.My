@@ -193,28 +193,17 @@
         </div>
       </div>
 
-      <!-- Laporan summary 2x2 -->
-      <div class="laporan-summary">
-        <div class="lap-sum-card"><div class="lsc-label">Total Pemasukan</div><div class="lsc-val income" id="lap-income">Rp 0</div><div class="lsc-sub" id="lap-income-count">0 transaksi</div></div>
-        <div class="lap-sum-card"><div class="lsc-label">Total Pengeluaran</div><div class="lsc-val expense" id="lap-expense">Rp 0</div><div class="lsc-sub" id="lap-expense-count">0 transaksi</div></div>
-        <div class="lap-sum-card"><div class="lsc-label">Selisih Bersih</div><div class="lsc-val info" id="lap-net">Rp 0</div><div class="lsc-sub">Pemasukan − Pengeluaran</div></div>
-        <div class="lap-sum-card"><div class="lsc-label">Rata-rata/Hari</div><div class="lsc-val warn" id="lap-avg">Rp 0</div><div class="lsc-sub">Pengeluaran harian</div></div>
-      </div>
-
-      <!-- Donut Chart -->
+      <!-- Donut + Breakdown digabung -->
       <div class="chart-card">
         <div class="chart-title">🍩 Pengeluaran per Kategori</div>
         <div class="chart-subtitle" id="donut-period-label">periode dipilih</div>
         <div class="chart-donut-wrap">
-          <canvas id="chart-donut" style="width:160px;height:160px;flex-shrink:0;"></canvas>
+          <canvas id="chart-donut" style="width:140px;height:140px;flex-shrink:0;"></canvas>
           <div class="donut-legend" id="donut-legend"></div>
         </div>
-      </div>
-
-      <!-- Category breakdown list -->
-      <div class="lap-cat-list">
-        <div class="lap-cat-title">🏆 Breakdown Pengeluaran</div>
-        <div id="lap-cat-items"></div>
+        <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+          <div id="lap-cat-items"></div>
+        </div>
       </div>
 
       <!-- Day heatmap -->
@@ -227,12 +216,6 @@
       <div class="chart-card">
         <div class="chart-title">💸 Pengeluaran Terbesar</div>
         <div id="top-expenses-list"></div>
-      </div>
-
-      <!-- Averages -->
-      <div class="chart-card">
-        <div class="chart-title">📊 Rata-rata Bulanan</div>
-        <div id="avg-stats"></div>
       </div>
 
       <!-- Export -->
