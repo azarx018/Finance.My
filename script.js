@@ -851,12 +851,19 @@ function renderTabungan() {
     const bal = getBucketBalance(b.id);
     const pct = b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null;
     const recentTxs = APP.savingTxs.filter(t=>t.bucketId===b.id).slice(-3).reverse();
+    // Collect unique wallets used for deposits in this bucket
+    const usedWalletIds = [...new Set(APP.savingTxs.filter(t=>t.bucketId===b.id && t.type==='deposit').map(t=>t.walletId))];
+    const walletTags = usedWalletIds.map(wid => {
+      const w = APP.wallets.find(x=>x.id===wid);
+      return w ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--card2,#f1f5f9);border-radius:20px;padding:2px 8px;font-size:0.62rem;color:var(--txt-muted);margin-right:4px;margin-top:4px;">${w.emoji} ${w.name}</span>` : '';
+    }).join('');
     return `<div class="wallet-card" style="margin-bottom:12px;">
       <div class="wcard-top">
         <div class="wcard-emoji">${b.emoji||'🪣'}</div>
         <div style="flex:1;min-width:0;">
           <div class="wcard-name">${b.name}</div>
-          <div class="wcard-count">${recentTxs.length} transaksi terakhir</div>
+          ${walletTags ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;">${walletTags}</div>` : ''}
+          <div class="wcard-count" style="margin-top:4px;">${recentTxs.length} transaksi terakhir</div>
         </div>
         <div style="text-align:right;">
           <div class="wcard-bal" style="color:var(--info)">${formatRp(bal)}</div>
