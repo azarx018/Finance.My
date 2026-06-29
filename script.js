@@ -946,6 +946,7 @@ APP._savingTxBucketId = null;
 function openSavingTxSheet(mode='deposit', bucketId=null) {
   APP._savingTxMode = mode;
   APP._savingTxBucketId = bucketId;
+  APP._savingTxWalletId = APP.selectedWalletId || APP.wallets[0]?.id;
   const title = $('#saving-tx-title');
   if(title) title.textContent = mode==='deposit'?'⬆️ Tabung':'⬇️ Tarik dari Tabungan';
   // Toggle active state
@@ -981,7 +982,7 @@ function saveSavingTx() {
   const raw = $('#saving-tx-amount')?.value?.replace(/\D/g,'')||'0';
   const amount = parseInt(raw)||0;
   if(!amount) return showToast('Masukkan jumlah','error');
-  const walletId = $('#saving-wallet-select .wallet-pill.selected')?.dataset?.wid || APP.wallets[0]?.id;
+  const walletId = APP._savingTxWalletId || $('#saving-wallet-select .wallet-pill.selected')?.dataset?.wid || APP.wallets[0]?.id;
   const date = $('#saving-tx-date')?.value||todayStr();
   const note = $('#saving-tx-note')?.value?.trim()||'';
   const mode = APP._savingTxMode;
@@ -998,12 +999,12 @@ function saveSavingTx() {
   // Add saving transaction
   APP.savingTxs.push({id:genId(), bucketId, walletId, type:mode, amount, date, note});
 
-  // Adjust wallet balance via transaction
+  // Adjust wallet balance via a regular transaction (store bucketId for future cleanup)
   const bucket = APP.savingBuckets.find(b=>b.id===bucketId);
   const desc = mode==='deposit'?`Tabung → ${bucket?.name||'Tabungan'}`:`Tarik ← ${bucket?.name||'Tabungan'}`;
   APP.transactions.push({
     id:genId(), type: mode==='deposit'?'expense':'income',
-    amount, catId:'saving_transfer', desc, date, walletId, note, photo:null
+    amount, catId:'saving_transfer', desc, date, walletId, note, photo:null, bucketId
   });
 
   persist(); closeSheet('saving-tx'); renderTabungan(); renderDashboard();
@@ -1411,14 +1412,18 @@ function buildCatScroll(type) {
 
 function buildWalletSelectRow(containerId, selectedId) {
   const c = $(`#${containerId}`); if (!c) return;
-  c.innerHTML = APP.wallets.map(w =>
-    `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-wid="${w.id}">
+  const showBal = containerId === 'saving-wallet-select';
+  c.innerHTML = APP.wallets.map(w => {
+    const bal = showBal ? ` <span style="font-size:0.65rem;opacity:0.75;">(${formatRpC(getWalletBalance(w.id))})</span>` : '';
+    return `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-wid="${w.id}">
       <span class="wallet-pill-emoji">${w.emoji}</span>
-      <span class="wallet-pill-name">${w.name}</span>
-    </div>`).join('');
+      <span class="wallet-pill-name">${w.name}${bal}</span>
+    </div>`;
+  }).join('');
   c.querySelectorAll('.wallet-pill').forEach(p => {
     p.addEventListener('click', () => {
       if (containerId==='wallet-select-row') APP.selectedWalletId    = p.dataset.wid;
+      else if (containerId==='saving-wallet-select') APP._savingTxWalletId = p.dataset.wid;
       else                                   APP.selectedRecWalletId = p.dataset.wid;
       c.querySelectorAll('.wallet-pill').forEach(x => x.classList.remove('selected'));
       p.classList.add('selected');
@@ -1855,17 +1860,14 @@ function confirmDelete() {
   else if (type==='wallet') { APP.wallets=APP.wallets.filter(w=>w.id!==id); renderDompet(); renderDashboard(); showToast('🗑️ Dompet dihapus','info'); }
   else if (type==='rec')    { APP.recurringTx=APP.recurringTx.filter(r=>r.id!==id); renderRecurring(); showToast('🗑️ Dihapus','info'); }
   else if (type==='bucket') {
-    // Collect IDs of saving transactions for this bucket
-    const relSavingTxIds = new Set(APP.savingTxs.filter(t=>t.bucketId===id).map(t=>t.id));
-    // Remove saving transactions
-    APP.savingTxs = APP.savingTxs.filter(t=>t.bucketId!==id);
-    // Remove the wallet transactions that were created alongside each saving tx
-    // They share the same date+amount+walletId and catId='saving_transfer'
-    // We stored a parallel APP.transactions entry for each saveSavingTx call
-    // The safest way: remove saving_transfer transactions whose date+walletId matches
-    // We track by removing the bucket itself
-    APP.savingBuckets = APP.savingBuckets.filter(b=>b.id!==id);
-    renderTabungan(); renderDashboard(); showToast('🗑️ Kantong dan transaksinya dihapus','info');
+    // Remove linked wallet transactions using bucketId field (stored on new entries)
+    // This returns saldo back to the wallet
+    APP.transactions = APP.transactions.filter(t => t.bucketId !== id);
+    // Remove saving transactions for this bucket
+    APP.savingTxs = APP.savingTxs.filter(t => t.bucketId !== id);
+    // Remove the bucket itself
+    APP.savingBuckets = APP.savingBuckets.filter(b => b.id !== id);
+    renderTabungan(); renderDashboard(); showToast('🗑️ Kantong dihapus, saldo dikembalikan','info');
   }
   persist(); APP.deleteTarget=null; $('#modal-delete').style.display='none';
 }
