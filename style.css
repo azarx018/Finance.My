@@ -792,3 +792,17 @@ input,select,textarea{font-family:inherit;outline:none;}
 body.dark-mode .sbc-ring-fill{stroke:var(--emerald-500);}
 body.dark-mode .goal-progress-fill{background:linear-gradient(90deg,var(--emerald-600),var(--emerald-500));}
 body.dark-mode .dpp-fill{background:linear-gradient(90deg,var(--emerald-600),var(--emerald-500));}
+
+/* ===== TABUNGAN TYPE TOGGLE ===== */
+#sheet-saving-tx .type-btn.active.income-btn {
+  background: linear-gradient(135deg,#1d4ed8,#2563eb);
+  color: white;
+  box-shadow: 0 2px 12px rgba(37,99,235,0.30);
+}
+#sheet-saving-tx .type-btn.active.expense-btn {
+  background: linear-gradient(135deg,#ef4444,#dc2626);
+  color: white;
+  box-shadow: 0 2px 12px rgba(239,68,68,0.30);
+}
+/* Lainnya top btn active */
+#btn-lainnya-top.active-menu { color: var(--primary); background: var(--primary-bg); border-radius: 50%; }

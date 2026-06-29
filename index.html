@@ -49,6 +49,9 @@
       <span class="header-title" id="page-title">Dashboard</span>
     </div>
     <div class="header-right">
+      <button class="icon-btn" id="btn-lainnya-top" aria-label="Menu Lainnya" title="Lainnya">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
+      </button>
       <button class="icon-btn" id="dark-toggle" aria-label="Toggle dark mode">
         <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg id="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
@@ -279,20 +282,10 @@
           <div class="hub-name">Kalender</div>
           <div class="hub-sub">Agenda keuangan</div>
         </div>
-        <div class="hub-card" id="hub-impian">
-          <div class="hub-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">⭐</div>
-          <div class="hub-name">Impian</div>
-          <div class="hub-sub" id="hub-impian-sub">0 aktif</div>
-        </div>
         <div class="hub-card" id="hub-hutang">
           <div class="hub-icon" style="background:linear-gradient(135deg,#ef4444,#dc2626)">💸</div>
           <div class="hub-name">Hutang</div>
           <div class="hub-sub red" id="hub-hutang-sub">Rp 0</div>
-        </div>
-        <div class="hub-card" id="hub-recurring">
-          <div class="hub-icon" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed)">🔁</div>
-          <div class="hub-name">Berulang</div>
-          <div class="hub-sub" id="hub-recurring-sub">0 aktif</div>
         </div>
         <div class="hub-card" id="hub-settings">
           <div class="hub-icon" style="background:linear-gradient(135deg,#374151,#1f2937)">⚙️</div>
@@ -304,16 +297,49 @@
   </section>
 
   <!-- ======== IMPIAN ======== -->
+  <!-- ======== TABUNGAN ======== -->
   <section id="page-impian" class="page">
     <div class="scroll-area">
-      <div class="impian-summary">
-        <div class="is-item"><div class="is-icon">⭐</div><div><div class="is-val" id="is-active">0</div><div class="is-label">Aktif</div></div></div>
-        <div class="is-div"></div>
-        <div class="is-item"><div class="is-icon">🎉</div><div><div class="is-val green" id="is-reached">0</div><div class="is-label">Tercapai</div></div></div>
-        <div class="is-div"></div>
-        <div class="is-item"><div class="is-icon">💰</div><div><div class="is-val" id="is-total-saved">Rp 0</div><div class="is-label">Ditabung</div></div></div>
+      <!-- Total tabungan card -->
+      <div class="balance-card" style="background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 60%,#2563eb 100%);box-shadow:0 8px 32px rgba(37,99,235,0.28);">
+        <div class="balance-label">Total Tabungan</div>
+        <div class="balance-amount" id="saving-total-display">Rp 0</div>
+        <div class="balance-period">
+          <span>Dari semua kantong tabungan</span>
+          <span class="balance-badge" id="saving-bucket-count">0 kantong</span>
+        </div>
+        <div class="balance-stats">
+          <div class="stat-item income">
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
+            <div><div class="stat-label">Ditabung Bulan Ini</div><div class="stat-val" id="saving-this-month">Rp 0</div></div>
+          </div>
+          <div class="stat-item expense">
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+            <div><div class="stat-label">Ditarik Bulan Ini</div><div class="stat-val" id="saving-withdrawn">Rp 0</div></div>
+          </div>
+        </div>
       </div>
-      <div id="goals-list" class="goals-list"></div>
+
+      <!-- Quick actions -->
+      <div class="quick-actions" style="grid-template-columns:1fr 1fr;">
+        <div class="qa-btn income" id="qa-saving-deposit">
+          <div class="qa-icon" style="background:linear-gradient(135deg,#1d4ed8,#2563eb)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </div>
+          <span class="qa-label">Tabung</span>
+        </div>
+        <div class="qa-btn expense" id="qa-saving-withdraw">
+          <div class="qa-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div>
+          <span class="qa-label">Tarik</span>
+        </div>
+      </div>
+
+      <!-- Bucket list -->
+      <div class="section-header">
+        <span class="section-title">Kantong Tabungan</span>
+        <button class="see-all-btn" id="btn-add-bucket">+ Buat</button>
+      </div>
+      <div id="saving-bucket-list"></div>
     </div>
   </section>
 
@@ -338,22 +364,6 @@
         <button class="pill" data-dfilter="urgent">⚠️ Mendesak</button>
       </div>
       <div id="debt-list" class="debt-list"></div>
-    </div>
-  </section>
-
-  <!-- ======== RECURRING ======== -->
-  <section id="page-recurring" class="page">
-    <div class="scroll-area">
-      <div class="recurring-summary-card">
-        <div class="rsc-row">
-          <div class="rsc-item"><div class="rsc-val" id="rec-active-count">0</div><div class="rsc-label">Aktif</div></div>
-          <div class="rsc-div"></div>
-          <div class="rsc-item"><div class="rsc-val expense" id="rec-monthly-expense">Rp 0</div><div class="rsc-label">Pengeluaran/bln</div></div>
-          <div class="rsc-div"></div>
-          <div class="rsc-item"><div class="rsc-val income" id="rec-monthly-income">Rp 0</div><div class="rsc-label">Pemasukan/bln</div></div>
-        </div>
-      </div>
-      <div id="recurring-list" class="recurring-list"></div>
     </div>
   </section>
 
@@ -470,8 +480,8 @@
       <div class="app-info">
         <svg viewBox="0 0 48 48" fill="none" width="36" height="36"><rect x="4" y="4" width="40" height="40" rx="14" fill="url(#gi2)"/><circle cx="24" cy="24" r="6" fill="white" opacity="0.9"/><defs><linearGradient id="gi2" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
         <div class="app-info-name">Azar Finance</div>
-        <div class="app-info-ver">v3.0 · PWA Ready</div>
-        <div class="app-info-badge">Update v2 · IndexedDB · Laporan · Kalender</div>
+        <div class="app-info-ver">v4.0 · PWA Ready</div>
+        <div class="app-info-badge">Update v4 · Tabungan · Budget · Kalender</div>
       </div>
     </div>
   </section>
@@ -487,6 +497,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span>Home</span>
     </button>
+    <button class="nav-item" data-page="impian" aria-label="Tabungan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 01-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 000 4h2v-4h-2z"/></svg>
+      <span>Tabungan</span>
+    </button>
     <button class="nav-item" data-page="riwayat" aria-label="Transaksi">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span>Transaksi</span>
@@ -496,12 +510,8 @@
       <span>Analitik</span>
     </button>
     <button class="nav-item" data-page="laporan" aria-label="Budget">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><path d="M8 14h.01M12 14h.01M16 14h.01"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       <span>Budget</span>
-    </button>
-    <button class="nav-item" data-page="lainnya" aria-label="Lainnya">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-      <span>Lainnya</span>
     </button>
   </nav>
 </div>
@@ -772,6 +782,62 @@
   </div>
   <button class="submit-btn expense-mode" id="pay-submit">Proses Pembayaran</button>
   <button class="cancel-btn" id="pay-cancel" style="margin-top:10px;">Batal</button>
+  <div style="height:8px;"></div>
+</div>
+
+<!-- ADD BUCKET SHEET -->
+<div class="sheet-backdrop" id="bucket-backdrop"></div>
+<div class="bottom-sheet" id="sheet-bucket">
+  <div class="sheet-drag"></div>
+  <h3 class="sheet-title" id="bucket-sheet-title">🪣 Buat Kantong Tabungan</h3>
+  <div class="input-group mt4">
+    <label class="input-label">Nama Kantong</label>
+    <input type="text" id="bucket-name" class="text-input" placeholder="Beli Laptop, Dana Darurat..." autocomplete="off"/>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Emoji</label>
+    <div class="emoji-picker" id="bucket-emoji-picker"></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Target (Opsional)</label>
+    <div class="amount-wrapper"><span class="currency-prefix">Rp</span><input type="text" id="bucket-target" class="amount-input" placeholder="0" inputmode="numeric"/></div>
+  </div>
+  <button class="submit-btn" id="bucket-submit">Simpan</button>
+  <button class="cancel-btn" id="bucket-cancel" style="margin-top:10px;">Batal</button>
+  <div style="height:8px;"></div>
+</div>
+
+<!-- SAVING TRANSACTION SHEET -->
+<div class="sheet-backdrop" id="saving-tx-backdrop"></div>
+<div class="bottom-sheet" id="sheet-saving-tx">
+  <div class="sheet-drag"></div>
+  <h3 class="sheet-title" id="saving-tx-title">💰 Tabung</h3>
+  <div class="type-toggle" style="margin-bottom:14px;">
+    <button class="type-btn income-btn active" id="stx-deposit-btn">⬆️ Tabung</button>
+    <button class="type-btn expense-btn" id="stx-withdraw-btn">⬇️ Tarik</button>
+  </div>
+  <div class="input-group mt4">
+    <label class="input-label">Jumlah (Rp)</label>
+    <div class="amount-wrapper"><span class="currency-prefix">Rp</span><input type="text" id="saving-tx-amount" class="amount-input" placeholder="0" inputmode="numeric"/></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Ke Kantong</label>
+    <div class="wallet-select-row" id="saving-bucket-select"></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Dari Dompet</label>
+    <div class="wallet-select-row" id="saving-wallet-select"></div>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Tanggal</label>
+    <input type="date" id="saving-tx-date" class="text-input date-input"/>
+  </div>
+  <div class="input-group">
+    <label class="input-label">Catatan (Opsional)</label>
+    <input type="text" id="saving-tx-note" class="text-input" placeholder="Nabung bulanan..." autocomplete="off"/>
+  </div>
+  <button class="submit-btn" id="saving-tx-submit">Simpan</button>
+  <button class="cancel-btn" id="saving-tx-cancel" style="margin-top:10px;">Batal</button>
   <div style="height:8px;"></div>
 </div>
 

@@ -15,13 +15,14 @@ const EXPENSE_CATS = [
   {id:'shopping',name:'Belanja',emoji:'🛍️'},{id:'entertainment',name:'Hiburan',emoji:'🎮'},
   {id:'health',name:'Kesehatan',emoji:'💊'},{id:'education',name:'Pendidikan',emoji:'📚'},
   {id:'bills',name:'Tagihan',emoji:'💡'},{id:'home',name:'Rumah',emoji:'🏠'},
-  {id:'savings',name:'Tabungan',emoji:'🐷'},{id:'other_exp',name:'Lainnya',emoji:'💸'},
+  {id:'savings',name:'Tabungan',emoji:'🐷'},{id:'saving_transfer',name:'Transfer Tabungan',emoji:'🏦'},{id:'other_exp',name:'Lainnya',emoji:'💸'},
 ];
 const WALLET_EMOJIS = ['👛','💼','🏦','💳','📱','💵','🪙','🏧','💎','🏠'];
 
 // ===================== STATE =====================
 const APP = {
   transactions:[],goals:[],debts:[],wallets:[],recurringTx:[],budgets:[],reminders:[],
+  savingBuckets:[], savingTxs:[],
   currentPage:'dashboard', prevPage:null,
   editingTxId:null, editingGoalId:null, editingDebtId:null,
   editingWalletId:null, editingRecId:null, savingGoalId:null,
@@ -123,13 +124,15 @@ function idbGet(storeName, key) {
 async function _persistAsync() {
   try {
     await Promise.all([
-      idbSet(STORE_DATA, KEYS.tx,      APP.transactions),
-      idbSet(STORE_DATA, KEYS.goals,   APP.goals),
-      idbSet(STORE_DATA, KEYS.debts,   APP.debts),
-      idbSet(STORE_DATA, KEYS.wallets, APP.wallets),
-      idbSet(STORE_DATA, KEYS.rec,     APP.recurringTx),
-      idbSet(STORE_DATA, 'budgets',    APP.budgets),
-      idbSet(STORE_DATA, 'reminders',  APP.reminders),
+      idbSet(STORE_DATA, KEYS.tx,         APP.transactions),
+      idbSet(STORE_DATA, KEYS.goals,      APP.goals),
+      idbSet(STORE_DATA, KEYS.debts,      APP.debts),
+      idbSet(STORE_DATA, KEYS.wallets,    APP.wallets),
+      idbSet(STORE_DATA, KEYS.rec,        APP.recurringTx),
+      idbSet(STORE_DATA, 'budgets',       APP.budgets),
+      idbSet(STORE_DATA, 'reminders',     APP.reminders),
+      idbSet(STORE_DATA, 'savingBuckets', APP.savingBuckets),
+      idbSet(STORE_DATA, 'savingTxs',     APP.savingTxs),
     ]);
   } catch(e) { showToast('⚠️ Gagal simpan data!','error'); console.error(e); }
 }
@@ -149,7 +152,7 @@ function saveSettings() { return _saveSettingsAsync(); }
 
 async function loadAll() {
   try {
-    const [tx, goals, debts, wallets, rec, dark, notif, ntime, budgets, reminders] = await Promise.all([
+    const [tx, goals, debts, wallets, rec, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs] = await Promise.all([
       idbGet(STORE_DATA,     KEYS.tx),
       idbGet(STORE_DATA,     KEYS.goals),
       idbGet(STORE_DATA,     KEYS.debts),
@@ -160,14 +163,18 @@ async function loadAll() {
       idbGet(STORE_SETTINGS, KEYS.ntime),
       idbGet(STORE_DATA,     'budgets'),
       idbGet(STORE_DATA,     'reminders'),
+      idbGet(STORE_DATA,     'savingBuckets'),
+      idbGet(STORE_DATA,     'savingTxs'),
     ]);
-    APP.transactions = tx        || [];
-    APP.goals        = goals     || [];
-    APP.debts        = debts     || [];
-    APP.wallets      = wallets   || [];
-    APP.recurringTx  = rec       || [];
-    APP.budgets      = budgets   || [];
-    APP.reminders    = reminders || [];
+    APP.transactions  = tx             || [];
+    APP.goals         = goals          || [];
+    APP.debts         = debts          || [];
+    APP.wallets       = wallets        || [];
+    APP.recurringTx   = rec            || [];
+    APP.budgets       = budgets        || [];
+    APP.reminders     = reminders      || [];
+    APP.savingBuckets = savingBuckets  || [];
+    APP.savingTxs     = savingTxs      || [];
     APP.darkMode     = dark    !== undefined ? dark  : false;
     APP.notifEnabled = notif   !== undefined ? notif : false;
     APP.notifTime    = ntime   || '20:00';
@@ -695,247 +702,206 @@ function renderDompet() {
 
 // ===================== RENDER LAINNYA =====================
 function renderLainnya() {
-  $('#hub-impian-sub').textContent    = `${APP.goals.filter(g=>g.saved<g.target).length} aktif`;
-  $('#hub-hutang-sub').textContent    = formatRpC(APP.debts.filter(d=>!d.paid).reduce((s,d)=>s+d.amount,0));
-  $('#hub-recurring-sub').textContent = `${APP.recurringTx.filter(r=>r.active).length} aktif`;
   const dompetSub = $('#hub-dompet-sub');
   if(dompetSub) dompetSub.textContent = `${APP.wallets.length} dompet`;
+  const hutangSub = $('#hub-hutang-sub');
+  if(hutangSub) hutangSub.textContent = formatRpC(APP.debts.filter(d=>!d.paid).reduce((s,d)=>s+d.amount,0));
 }
 
 // ===================== RENDER IMPIAN =====================
-function renderImpian() {
-  $('#is-active').textContent    = APP.goals.filter(g=>g.saved<g.target).length;
-  $('#is-reached').textContent   = APP.goals.filter(g=>g.saved>=g.target).length;
-  $('#is-total-saved').textContent = formatRpC(APP.goals.reduce((s,g)=>s+(g.saved||0),0));
-  const c = $('#goals-list');
-  c.innerHTML = APP.goals.length
-    ? APP.goals.map((g,i) => goalCardHTML(g,i)).join('')
-    : emptyState('⭐','Belum ada impian','Ketuk + untuk menambah impian');
+// ===================== RENDER TABUNGAN =====================
+const BUCKET_EMOJIS = ['🎯','🚗','💻','🏠','✈️','📱','💍','🏋️','📚','🎮','🎸','🌏','💊','👔','🛋️','🐶'];
+
+function getSavingTotal() {
+  return APP.savingBuckets.reduce((s,b) => {
+    const deposited = APP.savingTxs.filter(t=>t.bucketId===b.id&&t.type==='deposit').reduce((a,t)=>a+t.amount,0);
+    const withdrawn = APP.savingTxs.filter(t=>t.bucketId===b.id&&t.type==='withdraw').reduce((a,t)=>a+t.amount,0);
+    return s + deposited - withdrawn;
+  }, 0);
 }
 
-function goalCardHTML(g, idx) {
-  const adv   = getGoalAdvice(g);
-  const pct   = adv.progress;
-  const isR   = g.saved >= g.target;
-  const isO   = !isR && adv.daysLeft === 0;
-  const left  = Math.max(0, g.target - g.saved);
-  const perBlock = (!isR && !isO && adv.perMonth) ? `
-    <div class="goal-save-stats">
-      <div class="gss-item"><div class="gss-val">${formatRpC(adv.perDay)}</div><div class="gss-lbl">/hari</div></div>
-      <div class="gss-item"><div class="gss-val">${formatRpC(adv.perMonth)}</div><div class="gss-lbl">/bulan</div></div>
-      <div class="gss-item"><div class="gss-val">${adv.daysLeft} hari</div><div class="gss-lbl">tersisa</div></div>
-    </div>` : '';
-  return `<div class="goal-card ${isR?'reached':isO?'overdue':''}" style="animation-delay:${idx*50}ms">
-    <div class="goal-header">
-      <div><div class="goal-name">${g.name}</div><div class="goal-meta">Deadline: ${formatDateShort(g.deadline)}</div></div>
-      <span class="goal-badge ${isR?'reached':isO?'overdue':'active'}">${isR?'🎉 Tercapai':isO?'⏰ Overdue':'⭐ Aktif'}</span>
-    </div>
-    <div class="goal-progress-row">
-      <div class="goal-progress-label">Progress Tabungan</div>
-      <div class="goal-progress-pct" style="color:${isR?'var(--income)':isO?'var(--expense)':'var(--txt-primary)'}">${pct}%</div>
-    </div>
-    <div class="goal-progress-bar"><div class="goal-progress-fill ${isO?'overdue':''}" style="width:${pct}%"></div></div>
-    <div class="goal-amounts">
-      <div class="goal-amount-item saved"><div class="goal-amount-val">${formatRpC(g.saved)}</div><div class="goal-amount-lbl">Ditabung</div></div>
-      <div class="goal-amount-item"><div class="goal-amount-val">${formatRpC(g.target)}</div><div class="goal-amount-lbl">Target</div></div>
-      <div class="goal-amount-item left"><div class="goal-amount-val">${formatRpC(left)}</div><div class="goal-amount-lbl">Kurang</div></div>
-    </div>
-    <div class="goal-advice ${adv.type}"><div class="goal-advice-title">${adv.title}</div><div>${adv.msg}</div></div>
-    ${perBlock}
-    <div class="goal-actions">
-      <button class="goal-btn save-btn" data-goal-save="${g.id}">💰 Tambah Tabungan</button>
-      <button class="goal-btn edit-btn" data-goal-edit="${g.id}">✏️ Edit</button>
-      <button class="goal-btn del-btn"  data-goal-del="${g.id}">🗑️</button>
-    </div>
-  </div>`;
+function getBucketBalance(bucketId) {
+  const dep = APP.savingTxs.filter(t=>t.bucketId===bucketId&&t.type==='deposit').reduce((s,t)=>s+t.amount,0);
+  const wit = APP.savingTxs.filter(t=>t.bucketId===bucketId&&t.type==='withdraw').reduce((s,t)=>s+t.amount,0);
+  return dep - wit;
 }
 
-function getGoalAdvice(g) {
-  const today    = new Date(); today.setHours(0,0,0,0);
-  const deadline = new Date(g.deadline+'T00:00:00');
-  const daysLeft = Math.max(0, Math.floor((deadline-today)/86400000));
-  const mLeft    = Math.max(0.033, daysLeft/30.44);
-  const amtLeft  = Math.max(0, g.target - g.saved);
-  const progress = g.target>0 ? Math.min(100,Math.round(g.saved/g.target*100)) : 0;
-  if (!amtLeft)  return {type:'reached',title:'🎉 Impian Tercapai!',msg:'Selamat! Kamu berhasil!',perMonth:0,perDay:0,progress,daysLeft};
-  if (!daysLeft) return {type:'overdue',title:'⏰ Deadline Terlewat',msg:`Masih kurang ${formatRp(amtLeft)}. Perbarui deadline.`,perMonth:0,perDay:0,progress,daysLeft};
-  const perDay   = Math.ceil(amtLeft/daysLeft);
-  const perMonth = Math.ceil(amtLeft/mLeft);
-  const avgInc   = getAvgMonthly('income',3);
-  const avgExp   = getAvgMonthly('expense',3);
-  const surplus  = avgInc - avgExp;
-  let type, title, msg;
-  if (!avgInc) {
-    type='info'; title='💡 Saran Menabung'; msg=`Sisihkan ${formatRp(perMonth)}/bulan agar tepat waktu.`;
-  } else if (surplus<=0) {
-    type='warning'; title='⚠️ Keuangan Perlu Diperbaiki'; msg='Pengeluaranmu melebihi pendapatan! Kurangi pengeluaran dulu.';
+function renderTabungan() {
+  const total = getSavingTotal();
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisMonthDep = APP.savingTxs.filter(t=>t.type==='deposit'&&t.date.startsWith(monthKey)).reduce((s,t)=>s+t.amount,0);
+  const thisMonthWit = APP.savingTxs.filter(t=>t.type==='withdraw'&&t.date.startsWith(monthKey)).reduce((s,t)=>s+t.amount,0);
+
+  const el = $('#saving-total-display'); if(el) el.textContent = formatRp(total);
+  const bc = $('#saving-bucket-count'); if(bc) bc.textContent = APP.savingBuckets.length+' kantong';
+  const sm = $('#saving-this-month'); if(sm) sm.textContent = formatRpC(thisMonthDep);
+  const sw = $('#saving-withdrawn'); if(sw) sw.textContent = formatRpC(thisMonthWit);
+
+  const list = $('#saving-bucket-list');
+  if(!list) return;
+  if(!APP.savingBuckets.length) {
+    list.innerHTML = emptyState('🪣','Belum ada kantong tabungan','Ketuk "+ Buat" untuk mulai');
+    return;
+  }
+  list.innerHTML = APP.savingBuckets.map(b => {
+    const bal = getBucketBalance(b.id);
+    const pct = b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null;
+    const recentTxs = APP.savingTxs.filter(t=>t.bucketId===b.id).slice(-3).reverse();
+    return `<div class="wallet-card" style="margin-bottom:12px;">
+      <div class="wcard-top">
+        <div class="wcard-emoji">${b.emoji||'🪣'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="wcard-name">${b.name}</div>
+          <div class="wcard-count">${recentTxs.length} transaksi terakhir</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="wcard-bal" style="color:var(--info)">${formatRp(bal)}</div>
+          ${pct!==null?`<div style="font-size:0.65rem;color:var(--txt-muted);margin-top:2px;">${pct}% dari target</div>`:''}
+        </div>
+      </div>
+      ${b.target>0?`<div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--txt-muted);margin-bottom:4px;">
+          <span>${formatRpC(bal)} tersimpan</span><span>Target ${formatRpC(b.target)}</span>
+        </div>
+        <div class="bi-bar"><div class="bi-bar-fill ${pct>=100?'safe':pct>=60?'warn':'safe'}" style="width:${pct}%;background:linear-gradient(90deg,#1d4ed8,#3b82f6)"></div></div>
+      </div>`:''}
+      <div class="wcard-actions">
+        <button class="wcard-btn transfer" data-bid="${b.id}" data-action="deposit">⬆️ Tabung</button>
+        <button class="wcard-btn transfer" data-bid="${b.id}" data-action="withdraw" style="background:var(--expense-bg);color:var(--expense);border-color:rgba(239,68,68,0.25);">⬇️ Tarik</button>
+        <button class="wcard-btn edit" data-bid="${b.id}" data-action="edit">✏️</button>
+        <button class="wcard-btn del" data-bid="${b.id}" data-action="del">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Listeners
+  $$('#saving-bucket-list [data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const {bid, action} = btn.dataset;
+      if (action==='deposit') openSavingTxSheet('deposit', bid);
+      else if (action==='withdraw') openSavingTxSheet('withdraw', bid);
+      else if (action==='edit') openBucketSheet(bid);
+      else if (action==='del') {
+        if(APP.savingTxs.some(t=>t.bucketId===bid)) {
+          showToast('Hapus transaksi tabungan dulu','error'); return;
+        }
+        APP.savingBuckets = APP.savingBuckets.filter(b=>b.id!==bid);
+        persist(); renderTabungan(); showToast('Kantong dihapus','info');
+      }
+    });
+  });
+}
+
+// Bucket sheet
+APP._editBucketId = null;
+function openBucketSheet(editId=null) {
+  APP._editBucketId = editId;
+  const existing = editId ? APP.savingBuckets.find(b=>b.id===editId) : null;
+  const title = $('#bucket-sheet-title'); if(title) title.textContent = editId?'✏️ Edit Kantong':'🪣 Buat Kantong Tabungan';
+  const bn = $('#bucket-name'); if(bn) bn.value = existing?.name||'';
+  const bt = $('#bucket-target'); if(bt){ bt.value=existing?.target?existing.target.toLocaleString('id'):''; fmtAmtInput(bt); }
+  // Emoji picker
+  const ep = $('#bucket-emoji-picker');
+  if(ep) {
+    ep.innerHTML = BUCKET_EMOJIS.map(e=>`<div class="emoji-opt${(existing?.emoji||'🎯')===e?' selected':''}" data-emoji="${e}">${e}</div>`).join('');
+    $$('#bucket-emoji-picker .emoji-opt').forEach(o=>o.addEventListener('click',()=>{
+      $$('#bucket-emoji-picker .emoji-opt').forEach(x=>x.classList.remove('selected'));
+      o.classList.add('selected');
+    }));
+  }
+  openSheet('bucket');
+  setTimeout(()=>$('#bucket-name')?.focus(),300);
+}
+
+function saveBucket() {
+  const name = $('#bucket-name')?.value?.trim();
+  if(!name) return showToast('Isi nama kantong','error');
+  const emoji = $('#bucket-emoji-picker .emoji-opt.selected')?.dataset?.emoji||'🎯';
+  const raw = $('#bucket-target')?.value?.replace(/\D/g,'')||'0';
+  const target = parseInt(raw)||0;
+  if(APP._editBucketId) {
+    const b = APP.savingBuckets.find(x=>x.id===APP._editBucketId);
+    if(b){ b.name=name; b.emoji=emoji; b.target=target; }
   } else {
-    const pct = Math.round(perMonth/surplus*100);
-    if      (pct>100) { type='hard';   title='💪 Target Cukup Berat';     msg=`Butuh ${formatRp(perMonth)}/bln, surplus-mu hanya ${formatRp(surplus)}/bln. Pertimbangkan perpanjang deadline.`; }
-    else if (pct>60)  { type='medium'; title='🎯 Butuh Komitmen Tinggi';  msg=`Perlu ${formatRp(perMonth)}/bln (${pct}% dari sisa). Kurangi pengeluaran tidak perlu!`; }
-    else if (pct>25)  { type='good';   title='✅ Target Realistis';        msg=`Sisihkan ${formatRp(perMonth)}/bln (${pct}% dari sisa penghasilan). Kamu pasti bisa!`; }
-    else              { type='easy';   title='🚀 Sangat Terjangkau!';     msg=`Hanya ${formatRp(perMonth)}/bln (${pct}% dari sisa). Mudah dicapai!`; }
+    APP.savingBuckets.push({id:genId(),name,emoji,target,createdAt:todayStr()});
   }
-  return {type,title,msg,perMonth,perDay,progress,daysLeft};
+  persist(); closeSheet('bucket'); renderTabungan();
+  showToast(APP._editBucketId?'Kantong diupdate ✅':'Kantong dibuat ✅','success');
+  APP._editBucketId=null;
 }
 
-// ===================== RENDER HUTANG =====================
-function renderHutang() {
-  const f    = APP.debtFilter;
-  let list   = [...APP.debts];
-  if (f==='unpaid') list = list.filter(d=>!d.paid);
-  if (f==='paid')   list = list.filter(d=>d.paid);
-  if (f==='urgent') list = list.filter(d=>!d.paid && (daysUntil(d.dueDate)??999)<=7);
-  list.sort((a,b) => a.paid!==b.paid ? (a.paid?1:-1) : (a.dueDate||'').localeCompare(b.dueDate||''));
+// Saving transaction sheet
+APP._savingTxMode = 'deposit';
+APP._savingTxBucketId = null;
 
-  const unpaid      = APP.debts.filter(d=>!d.paid);
-  const unpaidTotal = unpaid.reduce((s,d)=>s+d.amount,0);
-  $('#hutang-total-display').textContent = formatRp(unpaidTotal);
-  $('#hc-unpaid').textContent = unpaid.length;
-  $('#hc-paid').textContent   = APP.debts.filter(d=>d.paid).length;
-  const nearest = unpaid.filter(d=>d.dueDate).sort((a,b)=>a.dueDate.localeCompare(b.dueDate))[0];
-  if (nearest) { const d=daysUntil(nearest.dueDate); $('#hc-nearest').textContent=d<=0?'Hari ini!':`${d}h lagi`; }
-  else $('#hc-nearest').textContent = '-';
-
-  $('#debt-list').innerHTML = list.length
-    ? list.map((d,i) => debtCardHTML(d,i)).join('')
-    : emptyState('💳', f==='urgent'?'Tidak ada hutang mendesak':'Tidak ada hutang', 'Bagus! Tetap bijak berhutang.');
-}
-
-function debtCardHTML(d, idx) {
-  const days     = daysUntil(d.dueDate);
-  const isLent   = d.dtype === 'lent';
-  const paidAmt  = d.paidAmount || 0;
-  const remaining= d.amount - paidAmt;
-  const pct      = Math.min(100, Math.round(paidAmt / d.amount * 100));
-
-  let urgClass='', urgBadge='', daysText='', daysColor='';
-  if (!d.paid) {
-    if      (days!==null && days<=0) { urgClass='urgent';       urgBadge=`<span class="debt-badge urgent-badge">🔴 Jatuh Tempo!</span>`;    daysText='Hari ini!';    daysColor='red'; }
-    else if (days!==null && days<=3) { urgClass='urgent';       urgBadge=`<span class="debt-badge urgent-badge">🔴 ${days}h lagi</span>`;    daysText=`${days} hari`; daysColor='red'; }
-    else if (days!==null && days<=7) { urgClass='warning-level';urgBadge=`<span class="debt-badge warn-badge">⚠️ ${days}h lagi</span>`;       daysText=`${days} hari`; daysColor='orange'; }
-    else if (days!==null)            { daysText=`${days} hari`; }
+function openSavingTxSheet(mode='deposit', bucketId=null) {
+  APP._savingTxMode = mode;
+  APP._savingTxBucketId = bucketId;
+  const title = $('#saving-tx-title');
+  if(title) title.textContent = mode==='deposit'?'⬆️ Tabung':'⬇️ Tarik dari Tabungan';
+  // Toggle active state
+  $('#stx-deposit-btn')?.classList.toggle('active', mode==='deposit');
+  $('#stx-withdraw-btn')?.classList.toggle('active', mode==='withdraw');
+  // Clear amount
+  const amt = $('#saving-tx-amount'); if(amt) amt.value='';
+  // Date
+  const dt = $('#saving-tx-date'); if(dt) dt.value=todayStr();
+  const note = $('#saving-tx-note'); if(note) note.value='';
+  // Bucket selector
+  const bs = $('#saving-bucket-select');
+  if(bs) {
+    bs.innerHTML = APP.savingBuckets.map(b=>`
+      <div class="wallet-pill${b.id===bucketId?' selected':''}" data-bucket="${b.id}">
+        <span class="wallet-pill-emoji">${b.emoji||'🪣'}</span>
+        <span class="wallet-pill-name">${b.name}</span>
+      </div>`).join('');
+    $$('#saving-bucket-select .wallet-pill').forEach(p=>p.addEventListener('click',()=>{
+      $$('#saving-bucket-select .wallet-pill').forEach(x=>x.classList.remove('selected'));
+      p.classList.add('selected'); APP._savingTxBucketId=p.dataset.bucket;
+    }));
   }
-
-  // Payment history (last 3)
-  const recentPayments = (d.payments||[]).slice(-3).reverse();
-  const payHistHTML = recentPayments.length ? `
-    <div class="debt-payments-list">
-      <div class="dpl-title">${isLent?'Riwayat Penerimaan':'Riwayat Cicilan'}</div>
-      ${recentPayments.map(p=>`
-        <div class="dpl-item">
-          <span class="dpl-date">${formatDateShort(p.date)}${p.note?` · ${p.note}`:''}</span>
-          <span class="dpl-amt">${isLent?'+':'-'} ${formatRp(p.amount)}</span>
-        </div>`).join('')}
-    </div>` : '';
-
-  const typeBadge = `<span class="debt-type-badge ${isLent?'lent':'borrowed'}">${isLent?'🤝 Piutang':'💸 Hutang'}</span>`;
-  const statusBadge = d.paid
-    ? '<span class="debt-badge paid-badge">✅ Lunas</span>'
-    : '<span class="debt-badge unpaid-badge">⏳ Belum Lunas</span>';
-
-  const progressBlock = !d.paid ? `
-    <div class="debt-pay-progress">
-      <div class="dpp-row">
-        <div class="dpp-label">${isLent?'Diterima Kembali':'Sudah Dibayar'}: ${formatRp(paidAmt)} / ${formatRp(d.amount)}</div>
-        <div class="dpp-pct" style="color:${pct>=100?'var(--income)':'var(--txt-secondary)'}">${pct}%</div>
-      </div>
-      <div class="dpp-bar"><div class="dpp-fill" style="width:${pct}%"></div></div>
-    </div>` : '';
-
-  // Main action buttons
-  const mainAction = d.paid
-    ? `<button class="debt-action-btn unlunas-btn" data-debt-unlunas="${d.id}">↩ Tandai Belum Lunas</button>`
-    : `<button class="debt-action-btn lunas-btn" data-debt-pay="${d.id}">${isLent?'💰 Catat Penerimaan':'💳 Bayar / Cicil'}</button>`;
-
-  return `<div class="debt-card ${d.paid?'paid':''} ${urgClass}" style="animation-delay:${idx*40}ms">
-    <div class="debt-top">
-      <div class="debt-left">
-        <div class="debt-name">${d.name}</div>
-        ${d.note?`<div class="debt-note">${d.note}</div>`:''}
-        ${d.paid&&d.paidDate?`<div class="debt-note">Lunas: ${formatDateShort(d.paidDate)}</div>`:''}
-      </div>
-      <div class="debt-badges">
-        ${typeBadge} ${statusBadge} ${urgBadge}
-      </div>
-    </div>
-    <div class="debt-info-row">
-      <div class="debt-info-item"><div class="dii-label">Total</div><div class="dii-val red">${formatRp(d.amount)}</div></div>
-      <div class="debt-info-item"><div class="dii-label">Sisa</div><div class="dii-val ${remaining>0?'red':'green'}">${formatRp(remaining)}</div></div>
-      <div class="debt-info-item"><div class="dii-label">Jatuh Tempo</div><div class="dii-val">${formatDateShort(d.dueDate)}</div></div>
-      ${!d.paid&&daysText?`<div class="debt-info-item"><div class="dii-label">Waktu</div><div class="dii-val ${daysColor}">${daysText}</div></div>`:''}
-    </div>
-    ${progressBlock}
-    ${payHistHTML}
-    <div class="debt-actions">
-      ${mainAction}
-      <button class="debt-action-btn edit-btn" data-debt-edit="${d.id}">✏️</button>
-      <button class="debt-action-btn del-btn"  data-debt-del="${d.id}">🗑️</button>
-    </div>
-  </div>`;
+  // Wallet selector
+  buildWalletSelectRow('saving-wallet-select', APP.selectedWalletId);
+  openSheet('saving-tx');
+  setTimeout(()=>$('#saving-tx-amount')?.focus(),300);
 }
 
-// ===================== RENDER RECURRING =====================
-function renderRecurring() {
-  const active = APP.recurringTx.filter(r=>r.active);
-  const toMonthly = r => r.freq==='daily'?r.amount*30 : r.freq==='weekly'?r.amount*4.3 : r.amount;
-  const monthExp  = active.filter(r=>r.type==='expense').reduce((s,r)=>s+toMonthly(r),0);
-  const monthInc  = active.filter(r=>r.type==='income').reduce((s,r)=>s+toMonthly(r),0);
-  $('#rec-active-count').textContent  = active.length;
-  $('#rec-monthly-expense').textContent = formatRpC(monthExp);
-  $('#rec-monthly-income').textContent  = formatRpC(monthInc);
+function saveSavingTx() {
+  const bucketId = APP._savingTxBucketId || $('#saving-bucket-select .wallet-pill.selected')?.dataset?.bucket;
+  if(!bucketId) return showToast('Pilih kantong tabungan','error');
+  const raw = $('#saving-tx-amount')?.value?.replace(/\D/g,'')||'0';
+  const amount = parseInt(raw)||0;
+  if(!amount) return showToast('Masukkan jumlah','error');
+  const walletId = $('#saving-wallet-select .wallet-pill.selected')?.dataset?.wallet || APP.wallets[0]?.id;
+  const date = $('#saving-tx-date')?.value||todayStr();
+  const note = $('#saving-tx-note')?.value?.trim()||'';
+  const mode = APP._savingTxMode;
 
-  const freqLabel = {daily:'Harian',weekly:'Mingguan',monthly:'Bulanan'};
-  const sorted    = [...APP.recurringTx].sort((a,b) => Number(b.active)-Number(a.active));
-  $('#recurring-list').innerHTML = sorted.length
-    ? sorted.map((r,i) => {
-        const isIn = r.type==='income';
-        return `<div class="rec-card ${r.active?'':'inactive'}" style="animation-delay:${i*40}ms">
-          <div class="rec-top">
-            <div class="rec-dot ${r.type}">${isIn?'💰':'💸'}</div>
-            <div class="rec-info">
-              <div class="rec-desc">${r.desc}</div>
-              <div class="rec-meta">${freqLabel[r.freq]||r.freq} · mulai ${formatDateShort(r.startDate)}</div>
-            </div>
-            <div class="rec-amount ${r.type}">${isIn?'+':'−'} ${formatRp(r.amount)}</div>
-          </div>
-          <div class="rec-bottom">
-            <div class="rec-next">Berikutnya: ${formatDateShort(r.nextRun)}</div>
-            <div class="rec-actions">
-              <label class="rec-toggle">
-                <input type="checkbox" ${r.active?'checked':''} data-rec-toggle="${r.id}"/>
-                <span class="rec-slider"></span>
-              </label>
-              <button class="rec-edit-btn" data-rec-edit="${r.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-              <button class="rec-del-btn"  data-rec-del="${r.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></button>
-            </div>
-          </div>
-        </div>`;
-      }).join('')
-    : emptyState('🔁','Belum ada transaksi berulang','Ketuk + untuk menambah');
-}
-
-// ===================== NAVIGATION =====================
-const SUB_PAGES = ['impian','hutang','recurring','settings','laporan','kalender','budget'];
-
-// ===================== RENDER LAPORAN =====================
-const LAPORAN_PERIOD = { month:1, '3month':3, '6month':6, year:12 };
-APP.laporanPeriod = APP.laporanPeriod || 'month';
-
-function getDateRangeLaporan(period) {
-  const now = new Date(); const y=now.getFullYear(), m=now.getMonth();
-  if (period==='month') {
-    return { from:`${y}-${String(m+1).padStart(2,'0')}-01`, to:todayStr(), label:'Bulan Ini', subLabel:'per minggu' };
-  } else if (period==='3month') {
-    const d=new Date(y,m-2,1);
-    return { from:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, to:todayStr(), label:'3 Bulan Terakhir', subLabel:'per bulan' };
-  } else if (period==='6month') {
-    const d=new Date(y,m-5,1);
-    return { from:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, to:todayStr(), label:'6 Bulan Terakhir', subLabel:'per bulan' };
+  // Check wallet balance for deposit
+  if(mode==='deposit') {
+    const walBal = getWalletBalance(walletId);
+    if(walBal < amount) return showToast('Saldo dompet tidak cukup','error');
   } else {
-    return { from:`${y}-01-01`, to:todayStr(), label:`Tahun ${y}`, subLabel:'per bulan' };
+    const bucketBal = getBucketBalance(bucketId);
+    if(bucketBal < amount) return showToast('Saldo tabungan tidak cukup','error');
   }
+
+  // Add saving transaction
+  APP.savingTxs.push({id:genId(), bucketId, walletId, type:mode, amount, date, note});
+
+  // Adjust wallet balance via transaction
+  const bucket = APP.savingBuckets.find(b=>b.id===bucketId);
+  const desc = mode==='deposit'?`Tabung → ${bucket?.name||'Tabungan'}`:`Tarik ← ${bucket?.name||'Tabungan'}`;
+  APP.transactions.push({
+    id:genId(), type: mode==='deposit'?'expense':'income',
+    amount, catId:'saving_transfer', desc, date, walletId, note, photo:null
+  });
+
+  persist(); closeSheet('saving-tx'); renderTabungan(); renderDashboard();
+  showToast(mode==='deposit'?`✅ Berhasil menabung ${formatRpC(amount)}`:`✅ Berhasil menarik ${formatRpC(amount)}`,'success');
 }
+
 
 // ===================== RENDER BUDGET MANAGER =====================
 
@@ -1246,8 +1212,7 @@ function navigateTo(page, fromNav=false) {
       || (isSubPage && np==='lainnya' && !['laporan','kalender','budget'].includes(page));
     n.classList.toggle('active', isActive);
   });
-
-  const titles = {dashboard:'Dashboard',analitik:'Analitik & Laporan',riwayat:'Transaksi',dompet:'Dompet',lainnya:'Lainnya',impian:'Impian',hutang:'Hutang',recurring:'Berulang',settings:'Pengaturan',laporan:'Analitik & Laporan',kalender:'Kalender Keuangan',budget:'Budget Manager'};
+  const titles = {dashboard:'Dashboard',analitik:'Analitik & Laporan',riwayat:'Transaksi',dompet:'Dompet',lainnya:'Lainnya',impian:'Tabungan',hutang:'Hutang',settings:'Pengaturan',laporan:'Budget Manager',kalender:'Kalender Keuangan',budget:'Budget Manager'};
   $('#page-title').textContent = titles[page] || '';
 
   const showBack = isSubPage;
@@ -1256,19 +1221,18 @@ function navigateTo(page, fromNav=false) {
 
   const fab = $('#fab-btn');
   fab.className = 'fab';
-  if      (page==='settings' || page==='lainnya' || page==='laporan' || page==='kalender' || page==='dashboard' || page==='budget') fab.style.display = 'none';
-  else if (page==='dompet')  { fab.style.display=''; fab.classList.add('wallet-fab'); }
-  else if (page==='hutang')  { fab.style.display=''; fab.classList.add('expense-fab'); }
-  else    { fab.style.display=''; }
+  if (page==='settings'||page==='lainnya'||page==='laporan'||page==='kalender'||page==='dashboard'||page==='budget'||page==='impian') fab.style.display='none';
+  else if (page==='dompet') { fab.style.display=''; fab.classList.add('wallet-fab'); }
+  else if (page==='hutang') { fab.style.display=''; fab.classList.add('expense-fab'); }
+  else fab.style.display='';
 
   if      (page==='dashboard') renderDashboard();
   else if (page==='analitik')  renderAnalitik();
   else if (page==='riwayat')   renderRiwayat();
   else if (page==='dompet')    renderDompet();
   else if (page==='lainnya')   renderLainnya();
-  else if (page==='impian')    renderImpian();
+  else if (page==='impian')    renderTabungan();
   else if (page==='hutang')    renderHutang();
-  else if (page==='recurring') renderRecurring();
   else if (page==='laporan')   renderBudget();
   else if (page==='kalender')  renderKalender();
   else if (page==='budget')    renderBudget();
@@ -1879,8 +1843,8 @@ async function init() {
   if (APP.notifEnabled) scheduleNotif();
   checkRecurring();
   renderDashboard();
-  // Pre-render budget so it's ready when user opens it
   renderBudget();
+  renderTabungan();
   setTimeout(() => { $('#app').style.display='flex'; }, 2250);
 
   // BOTTOM NAV
@@ -2009,12 +1973,28 @@ async function init() {
     if(APP.calSelectedDate){ openTxSheet(); $('#tx-date').value=APP.calSelectedDate; }
   });
 
-  // LAINNYA HUB
+  // LAINNYA di top nav
+  $('#btn-lainnya-top')?.addEventListener('click', ()=>navigateTo('lainnya', true));
+
+  // TABUNGAN
+  $('#qa-saving-deposit')?.addEventListener('click', ()=>openSavingTxSheet('deposit'));
+  $('#qa-saving-withdraw')?.addEventListener('click', ()=>openSavingTxSheet('withdraw'));
+  $('#btn-add-bucket')?.addEventListener('click', ()=>openBucketSheet());
+  $('#bucket-submit')?.addEventListener('click', saveBucket);
+  $('#bucket-cancel')?.addEventListener('click', ()=>closeSheet('bucket'));
+  $('#bucket-backdrop')?.addEventListener('click', ()=>closeSheet('bucket'));
+  $('#bucket-target')?.addEventListener('input', ()=>fmtAmtInput($('#bucket-target')));
+  $('#saving-tx-submit')?.addEventListener('click', saveSavingTx);
+  $('#saving-tx-cancel')?.addEventListener('click', ()=>closeSheet('saving-tx'));
+  $('#saving-tx-backdrop')?.addEventListener('click', ()=>closeSheet('saving-tx'));
+  $('#saving-tx-amount')?.addEventListener('input', ()=>fmtAmtInput($('#saving-tx-amount')));
+  $('#stx-deposit-btn')?.addEventListener('click', ()=>openSavingTxSheet('deposit', APP._savingTxBucketId));
+  $('#stx-withdraw-btn')?.addEventListener('click', ()=>openSavingTxSheet('withdraw', APP._savingTxBucketId));
+
+  // HUB LAINNYA
   $('#hub-dompet')?.addEventListener('click',    () => navigateTo('dompet'));
   $('#hub-kalender')?.addEventListener('click',  () => navigateTo('kalender'));
-  $('#hub-impian').addEventListener('click',     () => navigateTo('impian'));
   $('#hub-hutang').addEventListener('click',     () => navigateTo('hutang'));
-  $('#hub-recurring').addEventListener('click',  () => navigateTo('recurring'));
   $('#hub-settings').addEventListener('click',   () => navigateTo('settings'));
 
   // WALLET SHEET
@@ -2080,10 +2060,10 @@ async function init() {
   $('#reset-cancel').addEventListener('click', () => $('#modal-reset').style.display='none');
   $('#reset-confirm').addEventListener('click', async () => {
     APP.transactions=[]; APP.goals=[]; APP.debts=[]; APP.recurringTx=[];
-    APP.budgets=[]; APP.reminders=[];
+    APP.budgets=[]; APP.reminders=[]; APP.savingBuckets=[]; APP.savingTxs=[];
     APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
     await persist();
-    renderDashboard(); renderRiwayat(); renderLainnya(); renderBudget();
+    renderDashboard(); renderRiwayat(); renderLainnya(); renderBudget(); renderTabungan();
     $('#modal-reset').style.display='none';
     showToast('🗑️ Semua data direset','info');
   });
