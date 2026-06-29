@@ -128,6 +128,8 @@ async function _persistAsync() {
       idbSet(STORE_DATA, KEYS.debts,   APP.debts),
       idbSet(STORE_DATA, KEYS.wallets, APP.wallets),
       idbSet(STORE_DATA, KEYS.rec,     APP.recurringTx),
+      idbSet(STORE_DATA, 'budgets',    APP.budgets),
+      idbSet(STORE_DATA, 'reminders',  APP.reminders),
     ]);
   } catch(e) { showToast('⚠️ Gagal simpan data!','error'); console.error(e); }
 }
@@ -937,9 +939,6 @@ function getDateRangeLaporan(period) {
 
 // ===================== RENDER BUDGET MANAGER =====================
 
-async function persistBudgets() {
-  await idbSet(STORE_DATA, 'budgets', APP.budgets);
-}
 
 function getBudgetMonth() {
   const n=new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
@@ -1019,7 +1018,7 @@ function renderBudget() {
     $$('#budget-list .bi-action-btn.edit').forEach(btn=>btn.addEventListener('click',()=>openBudgetSheet(btn.dataset.bid)));
     $$('#budget-list .bi-action-btn.del').forEach(btn=>btn.addEventListener('click',()=>{
       APP.budgets=APP.budgets.filter(b=>b.id!==btn.dataset.bid);
-      persistBudgets(); renderBudget(); showToast('Budget dihapus','info');
+      persist(); renderBudget(); showToast('Budget dihapus','info');
     }));
   }
 
@@ -1086,7 +1085,7 @@ function saveBudget() {
   } else {
     APP.budgets.push({id:genId(),cat,limit,month});
   }
-  persistBudgets(); closeSheet('budget'); renderBudget();
+  persist(); closeSheet('budget'); renderBudget();
   showToast(APP._editBudgetId?'Budget diupdate ✅':'Budget ditambahkan ✅','success');
   APP._editBudgetId=null;
 }
@@ -1096,9 +1095,6 @@ APP.calYear         = APP.calYear         || new Date().getFullYear();
 APP.calMonth        = APP.calMonth        || new Date().getMonth();
 APP.calSelectedDate = APP.calSelectedDate || todayStr();
 
-async function persistReminders() {
-  await idbSet(STORE_DATA, 'reminders', APP.reminders);
-}
 
 function renderKalender() {
   const y=APP.calYear, m=APP.calMonth;
@@ -1212,7 +1208,7 @@ function renderKalenderDetail() {
 
   $$('#cal-agenda-list .cal-reminder-del').forEach(btn=>btn.addEventListener('click',()=>{
     APP.reminders=APP.reminders.filter(r=>r.id!==btn.dataset.rid);
-    persistReminders(); renderKalender(); showToast('Pengingat dihapus','info');
+    persist(); renderKalender(); showToast('Pengingat dihapus','info');
   }));
 }
 
@@ -1231,7 +1227,7 @@ function saveReminder() {
   const raw=$('#reminder-amount')?.value?.replace(/\D/g,'')||'0';
   const cat=$('#reminder-cat')?.value||'bills';
   APP.reminders.push({ id:genId(), date:APP.calSelectedDate, title, amount:parseInt(raw)||0, cat });
-  persistReminders(); closeSheet('reminder'); renderKalender();
+  persist(); closeSheet('reminder'); renderKalender();
   showToast('🔔 Pengingat ditambahkan','success');
 }
 
@@ -1882,6 +1878,8 @@ async function init() {
   if (APP.notifEnabled) scheduleNotif();
   checkRecurring();
   renderDashboard();
+  // Pre-render budget so it's ready when user opens it
+  renderBudget();
   setTimeout(() => { $('#app').style.display='flex'; }, 2250);
 
   // BOTTOM NAV
@@ -2081,9 +2079,11 @@ async function init() {
   $('#reset-cancel').addEventListener('click', () => $('#modal-reset').style.display='none');
   $('#reset-confirm').addEventListener('click',() => {
     APP.transactions=[]; APP.goals=[]; APP.debts=[]; APP.recurringTx=[];
+    APP.budgets=[]; APP.reminders=[];
     APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
     persist();
     renderDashboard(); renderRiwayat(); renderLainnya();
+    if(APP.currentPage==='laporan') renderBudget();
     $('#modal-reset').style.display='none';
     showToast('🗑️ Semua data direset','info');
   });
