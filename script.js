@@ -1269,7 +1269,7 @@ function navigateTo(page, fromNav=false) {
   else if (page==='impian')    renderImpian();
   else if (page==='hutang')    renderHutang();
   else if (page==='recurring') renderRecurring();
-  else if (page==='laporan')   renderLaporan();
+  else if (page==='laporan')   renderBudget();
   else if (page==='kalender')  renderKalender();
   else if (page==='budget')    renderBudget();
   if (page==='settings') {
@@ -1787,9 +1787,10 @@ function refreshCurrentPage() {
   else if (p==='riwayat')   renderRiwayat();
   else if (p==='analitik')  renderAnalitik();
   else if (p==='dompet')    renderDompet();
-  else if (p==='laporan')   renderBudget();
   else if (p==='impian')    renderImpian();
   else if (p==='hutang')    renderHutang();
+  // Budget selalu direfresh karena sinkron dengan transaksi
+  if (p==='laporan' || p==='budget') renderBudget();
 }
 
 // ===================== EXPORT / IMPORT =====================
@@ -2077,13 +2078,12 @@ async function init() {
   // RESET MODAL
   $('#btn-reset').addEventListener('click',    () => $('#modal-reset').style.display='flex');
   $('#reset-cancel').addEventListener('click', () => $('#modal-reset').style.display='none');
-  $('#reset-confirm').addEventListener('click',() => {
+  $('#reset-confirm').addEventListener('click', async () => {
     APP.transactions=[]; APP.goals=[]; APP.debts=[]; APP.recurringTx=[];
     APP.budgets=[]; APP.reminders=[];
     APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
-    persist();
-    renderDashboard(); renderRiwayat(); renderLainnya();
-    if(APP.currentPage==='laporan') renderBudget();
+    await persist();
+    renderDashboard(); renderRiwayat(); renderLainnya(); renderBudget();
     $('#modal-reset').style.display='none';
     showToast('🗑️ Semua data direset','info');
   });
