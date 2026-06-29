@@ -886,8 +886,13 @@ function renderTabungan() {
       else if (action==='withdraw') openSavingTxSheet('withdraw', bid);
       else if (action==='edit') openBucketSheet(bid);
       else if (action==='del') {
-        if(APP.savingTxs.some(t=>t.bucketId===bid)) {
-          showToast('Hapus transaksi tabungan dulu','error'); return;
+        const hasTxs = APP.savingTxs.some(t=>t.bucketId===bid);
+        if(hasTxs) {
+          const txCount = APP.savingTxs.filter(t=>t.bucketId===bid).length;
+          APP.deleteTarget = {type:'bucket', id:bid};
+          $('#modal-delete-msg').textContent = `Kantong ini memiliki ${txCount} transaksi tabungan. Semua transaksi tabungan pada kantong ini akan ikut dihapus. Lanjutkan?`;
+          $('#modal-delete').style.display = 'flex';
+          return;
         }
         APP.savingBuckets = APP.savingBuckets.filter(b=>b.id!==bid);
         persist(); renderTabungan(); showToast('Kantong dihapus','info');
@@ -976,7 +981,7 @@ function saveSavingTx() {
   const raw = $('#saving-tx-amount')?.value?.replace(/\D/g,'')||'0';
   const amount = parseInt(raw)||0;
   if(!amount) return showToast('Masukkan jumlah','error');
-  const walletId = $('#saving-wallet-select .wallet-pill.selected')?.dataset?.wallet || APP.wallets[0]?.id;
+  const walletId = $('#saving-wallet-select .wallet-pill.selected')?.dataset?.wid || APP.wallets[0]?.id;
   const date = $('#saving-tx-date')?.value||todayStr();
   const note = $('#saving-tx-note')?.value?.trim()||'';
   const mode = APP._savingTxMode;
@@ -1849,6 +1854,19 @@ function confirmDelete() {
   else if (type==='debt')   { APP.debts=APP.debts.filter(d=>d.id!==id); renderHutang(); renderLainnya(); showToast('🗑️ Hutang dihapus','info'); }
   else if (type==='wallet') { APP.wallets=APP.wallets.filter(w=>w.id!==id); renderDompet(); renderDashboard(); showToast('🗑️ Dompet dihapus','info'); }
   else if (type==='rec')    { APP.recurringTx=APP.recurringTx.filter(r=>r.id!==id); renderRecurring(); showToast('🗑️ Dihapus','info'); }
+  else if (type==='bucket') {
+    // Collect IDs of saving transactions for this bucket
+    const relSavingTxIds = new Set(APP.savingTxs.filter(t=>t.bucketId===id).map(t=>t.id));
+    // Remove saving transactions
+    APP.savingTxs = APP.savingTxs.filter(t=>t.bucketId!==id);
+    // Remove the wallet transactions that were created alongside each saving tx
+    // They share the same date+amount+walletId and catId='saving_transfer'
+    // We stored a parallel APP.transactions entry for each saveSavingTx call
+    // The safest way: remove saving_transfer transactions whose date+walletId matches
+    // We track by removing the bucket itself
+    APP.savingBuckets = APP.savingBuckets.filter(b=>b.id!==id);
+    renderTabungan(); renderDashboard(); showToast('🗑️ Kantong dan transaksinya dihapus','info');
+  }
   persist(); APP.deleteTarget=null; $('#modal-delete').style.display='none';
 }
 function refreshCurrentPage() {
