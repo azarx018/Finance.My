@@ -1,8 +1,28 @@
 /* ================================================
-   AZAR FINANCE v3.0 — script.js
-   Multi-Wallet · Analitik · Recurring · Notes · Photos
+   AZAR FINANCE v4.2 — script.js
+   Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
+
+// Single source of truth for the app version shown in Settings,
+// embedded in exports/backups, and used to bust the Service Worker
+// cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
+// on every release: bump this + sw.js CACHE_NAME + index.html footer text.
+const APP_VERSION = '4.2';
+
+// ===================== SECURITY: HTML ESCAPING =====================
+// User-supplied text (description, notes, wallet/debt/goal names, etc.)
+// is rendered via innerHTML throughout this app. Always pass such text
+// through escapeHtml() before interpolating it into a template string.
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // ===================== CATEGORIES =====================
 const INCOME_CATS = [
@@ -21,22 +41,22 @@ const WALLET_EMOJIS = ['👛','💼','🏦','💳','📱','💵','🪙','🏧','
 
 // ===================== STATE =====================
 const APP = {
-  transactions:[],goals:[],debts:[],wallets:[],recurringTx:[],budgets:[],reminders:[],
+  transactions:[],goals:[],debts:[],wallets:[],budgets:[],reminders:[],
   savingBuckets:[], savingTxs:[],
   currentPage:'dashboard', prevPage:null,
   editingTxId:null, editingGoalId:null, editingDebtId:null,
-  editingWalletId:null, editingRecId:null, savingGoalId:null,
+  editingWalletId:null, savingGoalId:null,
+  debtType:'borrowed', debtWalletId:'', payDebtId:'', payWalletId:'',
   selectedType:'income', selectedCatId:'other_inc', selectedWalletId:'default',
   dashFilter:'month', histFilter:'all', histSearch:'', debtFilter:'all', analitikPeriod:'month',
   deleteTarget:null,
   darkMode:false, notifEnabled:false, notifTime:'20:00', notifTimerId:null,
-  recType:'expense', recFreq:'monthly', selectedRecWalletId:'default',
   txPhoto:null,
 };
 
 const KEYS = {
   tx:'azf3_tx', goals:'azf3_goals', debts:'azf3_debts',
-  wallets:'azf3_wallets', rec:'azf3_rec',
+  wallets:'azf3_wallets',
   dark:'azf3_dark', notif:'azf3_notif', ntime:'azf3_ntime',
 };
 
@@ -128,7 +148,6 @@ async function _persistAsync() {
       idbSet(STORE_DATA, KEYS.goals,      APP.goals),
       idbSet(STORE_DATA, KEYS.debts,      APP.debts),
       idbSet(STORE_DATA, KEYS.wallets,    APP.wallets),
-      idbSet(STORE_DATA, KEYS.rec,        APP.recurringTx),
       idbSet(STORE_DATA, 'budgets',       APP.budgets),
       idbSet(STORE_DATA, 'reminders',     APP.reminders),
       idbSet(STORE_DATA, 'savingBuckets', APP.savingBuckets),
@@ -136,8 +155,15 @@ async function _persistAsync() {
     ]);
   } catch(e) { showToast('⚠️ Gagal simpan data!','error'); console.error(e); }
 }
-// Sync-looking wrapper — callers don't need await, but returns Promise for when needed
-function persist() { return _persistAsync(); }
+// Sync-looking wrapper — callers don't need await, but returns Promise for when needed.
+// Calls are queued (not run concurrently) so that rapid successive edits can
+// never interleave their writes and corrupt state. Storage keys/schema are
+// unchanged — this only changes *when* writes run, not *what* is written.
+let _persistQueue = Promise.resolve();
+function persist() {
+  _persistQueue = _persistQueue.then(() => _persistAsync());
+  return _persistQueue;
+}
 
 async function _saveSettingsAsync() {
   try {
@@ -152,12 +178,11 @@ function saveSettings() { return _saveSettingsAsync(); }
 
 async function loadAll() {
   try {
-    const [tx, goals, debts, wallets, rec, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs] = await Promise.all([
+    const [tx, goals, debts, wallets, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs] = await Promise.all([
       idbGet(STORE_DATA,     KEYS.tx),
       idbGet(STORE_DATA,     KEYS.goals),
       idbGet(STORE_DATA,     KEYS.debts),
       idbGet(STORE_DATA,     KEYS.wallets),
-      idbGet(STORE_DATA,     KEYS.rec),
       idbGet(STORE_SETTINGS, KEYS.dark),
       idbGet(STORE_SETTINGS, KEYS.notif),
       idbGet(STORE_SETTINGS, KEYS.ntime),
@@ -170,7 +195,6 @@ async function loadAll() {
     APP.goals         = goals          || [];
     APP.debts         = debts          || [];
     APP.wallets       = wallets        || [];
-    APP.recurringTx   = rec            || [];
     APP.budgets       = budgets        || [];
     APP.reminders     = reminders      || [];
     APP.savingBuckets = savingBuckets  || [];
@@ -181,14 +205,13 @@ async function loadAll() {
   } catch(e) {
     console.error('loadAll error:', e);
     APP.transactions=[]; APP.goals=[]; APP.debts=[];
-    APP.wallets=[]; APP.recurringTx=[]; APP.budgets=[]; APP.reminders=[];
+    APP.wallets=[]; APP.budgets=[]; APP.reminders=[];
   }
   if (!APP.wallets.length) {
     APP.wallets = [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
     await persist();
   }
-  APP.selectedWalletId    = APP.wallets[0]?.id || 'default';
-  APP.selectedRecWalletId = APP.wallets[0]?.id || 'default';
+  APP.selectedWalletId = APP.wallets[0]?.id || 'default';
 }
 
 // ===================== AUTO BACKUP =====================
@@ -205,10 +228,10 @@ function setAutoBackupLastDate(d) {
 function doAutoBackup(silent = true) {
   if (!APP.transactions.length && !APP.goals.length && !APP.debts.length) return;
   const data = {
-    app: 'Azar Finance', version: '3.0',
+    app: 'Azar Finance', version: APP_VERSION,
     exported: new Date().toISOString(), autoBackup: true,
     transactions: APP.transactions, goals: APP.goals,
-    debts: APP.debts, wallets: APP.wallets, recurringTx: APP.recurringTx,
+    debts: APP.debts, wallets: APP.wallets,
   };
   dlBlob(JSON.stringify(data, null, 2),
     `azar-finance-autobackup-${todayStr()}.json`, 'application/json');
@@ -250,8 +273,30 @@ function getWalletBalance(walletId) {
     }, 0);
   return init + txBal + trBal;
 }
+// Computes balance + income/expense/count for EVERY wallet in a single
+// pass over APP.transactions, instead of re-filtering the full array
+// per wallet (which used to be O(wallets × transactions)). Use this
+// whenever more than one wallet's stats are needed at once (dashboard
+// totals, dompet list) — use getWalletBalance() above for one-off lookups.
+function computeWalletStats() {
+  const stats = {};
+  APP.wallets.forEach(w => { stats[w.id] = { balance: w.initialBalance||0, income:0, expense:0, count:0 }; });
+  APP.transactions.forEach(t => {
+    if (stats[t.walletId]) stats[t.walletId].count++;
+    if (t.type === 'transfer') {
+      if (stats[t.toWalletId]) stats[t.toWalletId].balance += t.amount;
+      if (stats[t.walletId])   stats[t.walletId].balance   -= t.amount;
+      return;
+    }
+    const s = stats[t.walletId]; if (!s) return;
+    if (t.type === 'income') { s.balance += t.amount; s.income += t.amount; }
+    else                     { s.balance -= t.amount; s.expense += t.amount; }
+  });
+  return stats;
+}
 function getTotalNetWorth() {
-  return APP.wallets.reduce((s,w) => s + getWalletBalance(w.id), 0);
+  const stats = computeWalletStats();
+  return APP.wallets.reduce((s,w) => s + (stats[w.id]?.balance||0), 0);
 }
 
 // ===================== FILTER HELPERS =====================
@@ -412,30 +457,6 @@ const Charts = {
   },
 };
 
-// ===================== RECURRING =====================
-function checkRecurring() {
-  const today = todayStr();
-  const due = APP.recurringTx.filter(r => r.active && r.nextRun <= today);
-  if (!due.length) return;
-  let added = 0;
-  due.forEach(r => {
-    APP.transactions.push({
-      id:genId(), type:r.type, amount:r.amount, desc:r.desc, date:today,
-      walletId:r.walletId||APP.wallets[0]?.id||'default',
-      catId:r.type==='income'?'other_inc':'other_exp',
-      note:'[Otomatis dari berulang]', photo:null,
-    });
-    r.lastRun = today;
-    const nd = new Date(today+'T00:00:00');
-    if      (r.freq==='daily')   nd.setDate(nd.getDate()+1);
-    else if (r.freq==='weekly')  nd.setDate(nd.getDate()+7);
-    else if (r.freq==='monthly') nd.setMonth(nd.getMonth()+1);
-    r.nextRun = nd.toISOString().split('T')[0];
-    added++;
-  });
-  if (added) { persist(); showToast(`🔁 ${added} transaksi berulang ditambahkan`); }
-}
-
 // ===================== TX ITEM HTML =====================
 const IN_ARR = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 17a1 1 0 01-.707-.293l-5-5a1 1 0 011.414-1.414L9 13.586V3a1 1 0 012 0v10.586l3.293-3.293a1 1 0 011.414 1.414l-5 5A1 1 0 0110 17z" clip-rule="evenodd"/></svg>`;
 const EX_ARR = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 01.707.293l5 5a1 1 0 01-1.414 1.414L11 6.414V17a1 1 0 11-2 0V6.414L5.707 9.707a1 1 0 01-1.414-1.414l5-5A1 1 0 0110 3z" clip-rule="evenodd"/></svg>`;
@@ -446,14 +467,14 @@ function txItemHTML(tx, delay=0) {
   const dotContent = isT ? '🔄' : (cat?.emoji || (isIn?IN_ARR:EX_ARR));
   const wallet = APP.wallets.find(w=>w.id===tx.walletId);
   const sign   = isIn ? '+' : isT ? '→' : '−';
-  const catMeta    = cat  ? `<span class="tx-cat-badge">${cat.name}</span>` : '';
-  const walletMeta = wallet ? ` · ${wallet.emoji}${wallet.name}` : '';
-  const noteMeta   = tx.note && tx.note!=='[Otomatis dari berulang]' ? ` · ${tx.note.slice(0,20)}${tx.note.length>20?'…':''}` : '';
+  const catMeta    = cat  ? `<span class="tx-cat-badge">${escapeHtml(cat.name)}</span>` : '';
+  const walletMeta = wallet ? ` · ${wallet.emoji}${escapeHtml(wallet.name)}` : '';
+  const noteMeta   = tx.note && tx.note!=='[Otomatis dari berulang]' ? ` · ${escapeHtml(tx.note.slice(0,20))}${tx.note.length>20?'…':''}` : '';
   const photoHTML  = tx.photo ? `<img src="${tx.photo}" class="tx-thumb" data-photo="${tx.photo}" alt="struk"/>` : '';
   return `<div class="tx-item ${tx.type}" style="animation-delay:${delay}ms" data-id="${tx.id}">
     <div class="tx-dot">${dotContent}</div>
     <div class="tx-info">
-      <div class="tx-desc">${tx.desc||'Tanpa deskripsi'}</div>
+      <div class="tx-desc">${escapeHtml(tx.desc)||'Tanpa deskripsi'}</div>
       <div class="tx-meta">${formatDate(tx.date)}${catMeta}<span>${walletMeta}${noteMeta}</span></div>
     </div>
     ${photoHTML}
@@ -476,7 +497,8 @@ function renderDashboard() {
   const r    = getDateRange(APP.dashFilter);
   const list = APP.transactions.filter(t => (!r || (t.date>=r.from && t.date<=r.to)) && t.type!=='transfer');
   const {income, expense} = calcTotals(list);
-  const nw   = getTotalNetWorth();
+  const walletStats = computeWalletStats();
+  const nw   = APP.wallets.reduce((s,w) => s + (walletStats[w.id]?.balance||0), 0);
   const savings = income - expense;
   const savRate = income>0 ? Math.round((savings/income)*100) : 0;
 
@@ -507,11 +529,11 @@ function renderDashboard() {
   // Wallet chips
   const wsr = $('#wallet-scroll-row');
   wsr.innerHTML = APP.wallets.map(w => {
-    const bal = getWalletBalance(w.id);
+    const bal = walletStats[w.id]?.balance || 0;
     return `<div class="wallet-chip">
       <span class="wc-emoji">${w.emoji}</span>
       <div>
-        <div class="wc-name">${w.name}</div>
+        <div class="wc-name">${escapeHtml(w.name)}</div>
         <div class="wc-bal" style="color:${bal>=0?'var(--income)':'var(--expense)'}">${formatRpC(bal)}</div>
       </div>
     </div>`;
@@ -640,7 +662,7 @@ function renderAnalitik() {
   $('#top-expenses-list').innerHTML = topExp.length
     ? topExp.map((t,i) => `<div class="top-exp-item">
         <div class="top-exp-rank">#${i+1}</div>
-        <div class="top-exp-info"><div class="top-exp-desc">${t.desc}</div><div class="top-exp-date">${formatDateShort(t.date)}</div></div>
+        <div class="top-exp-info"><div class="top-exp-desc">${escapeHtml(t.desc)}</div><div class="top-exp-date">${formatDateShort(t.date)}</div></div>
         <div class="top-exp-amt">${formatRp(t.amount)}</div>
       </div>`).join('')
     : `<div style="color:var(--txt-muted);font-size:0.8rem;padding:8px 0">Belum ada pengeluaran</div>`;
@@ -664,23 +686,22 @@ function renderRiwayat() {
 
 // ===================== RENDER DOMPET =====================
 function renderDompet() {
-  const total = getTotalNetWorth();
+  const stats = computeWalletStats();
+  const total = APP.wallets.reduce((s,w) => s + (stats[w.id]?.balance||0), 0);
   $('#dompet-total').textContent = formatRp(total);
   $('#dompet-total').style.color = total>=0 ? 'var(--income)' : 'var(--expense)';
   $('#dompet-count-label').textContent = `${APP.wallets.length} dompet`;
 
   $('#wallet-list').innerHTML = APP.wallets.length
     ? APP.wallets.map((w,i) => {
-        const bal      = getWalletBalance(w.id);
-        const txCount  = APP.transactions.filter(t=>t.walletId===w.id).length;
-        const inc      = APP.transactions.filter(t=>t.walletId===w.id&&t.type==='income').reduce((s,t)=>s+t.amount,0);
-        const exp      = APP.transactions.filter(t=>t.walletId===w.id&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+        const st       = stats[w.id] || {balance:0,income:0,expense:0,count:0};
+        const bal      = st.balance, txCount = st.count, inc = st.income, exp = st.expense;
         const isMain   = i===0;
         return `<div class="wallet-card" style="animation-delay:${i*50}ms">
           <div class="wcard-top">
             <div class="wcard-emoji">${w.emoji}</div>
             <div class="wcard-info">
-              <div class="wcard-name">${w.name} ${isMain?'<span class="wcard-default-badge">Utama</span>':''}</div>
+              <div class="wcard-name">${escapeHtml(w.name)} ${isMain?'<span class="wcard-default-badge">Utama</span>':''}</div>
               <div class="wcard-count">${txCount} transaksi</div>
             </div>
             <div class="wcard-bal" style="color:${bal>=0?'var(--income)':'var(--expense)'}">${formatRp(bal)}</div>
@@ -779,8 +800,8 @@ function renderHutang() {
     return `<div class="debt-card${d.paid?' paid':isUrgent?' urgent':isWarn?' warning-level':''}" style="animation-delay:${i*40}ms">
       <div class="debt-top">
         <div class="debt-left">
-          <div class="debt-name">${d.name} ${typeBadge}</div>
-          ${d.note?`<div class="debt-note">${d.note}</div>`:''}
+          <div class="debt-name">${escapeHtml(d.name)} ${typeBadge}</div>
+          ${d.note?`<div class="debt-note">${escapeHtml(d.note)}</div>`:''}
         </div>
         <div class="debt-badges">
           ${statusBadge}
@@ -804,12 +825,6 @@ function renderHutang() {
       </div>
     </div>`;
   }).join('');
-}
-
-// ===================== RENDER RECURRING (no dedicated page — keeps banner in sync) =====================
-function renderRecurring() {
-  // Recurring transactions are processed automatically via checkRecurring()
-  // This stub prevents ReferenceError when called after save/delete
 }
 
 // ===================== RENDER TABUNGAN =====================
@@ -855,13 +870,13 @@ function renderTabungan() {
     const usedWalletIds = [...new Set(APP.savingTxs.filter(t=>t.bucketId===b.id && t.type==='deposit').map(t=>t.walletId))];
     const walletTags = usedWalletIds.map(wid => {
       const w = APP.wallets.find(x=>x.id===wid);
-      return w ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--card2,#f1f5f9);border-radius:20px;padding:2px 8px;font-size:0.62rem;color:var(--txt-muted);margin-right:4px;margin-top:4px;">${w.emoji} ${w.name}</span>` : '';
+      return w ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--card2,#f1f5f9);border-radius:20px;padding:2px 8px;font-size:0.62rem;color:var(--txt-muted);margin-right:4px;margin-top:4px;">${w.emoji} ${escapeHtml(w.name)}</span>` : '';
     }).join('');
     return `<div class="wallet-card" style="margin-bottom:12px;">
       <div class="wcard-top">
         <div class="wcard-emoji">${b.emoji||'🪣'}</div>
         <div style="flex:1;min-width:0;">
-          <div class="wcard-name">${b.name}</div>
+          <div class="wcard-name">${escapeHtml(b.name)}</div>
           ${walletTags ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;">${walletTags}</div>` : ''}
           <div class="wcard-count" style="margin-top:4px;">${recentTxs.length} transaksi terakhir</div>
         </div>
@@ -896,8 +911,17 @@ function renderTabungan() {
         const hasTxs = APP.savingTxs.some(t=>t.bucketId===bid);
         if(hasTxs) {
           const txCount = APP.savingTxs.filter(t=>t.bucketId===bid).length;
+          const bal = getBucketBalance(bid);
+          const walletTxCount = APP.transactions.filter(t=>t.bucketId===bid).length;
           APP.deleteTarget = {type:'bucket', id:bid};
-          $('#modal-delete-msg').textContent = `Kantong ini memiliki ${txCount} transaksi tabungan. Semua transaksi tabungan pada kantong ini akan ikut dihapus. Lanjutkan?`;
+          let msg = `Kantong ini memiliki ${txCount} transaksi tabungan. Semua transaksi tabungan pada kantong ini akan ikut dihapus. Lanjutkan?`;
+          // Old buckets (created before this wallet-link field existed) may have
+          // deposits without a matching wallet transaction — warn instead of
+          // guessing which transaction to touch, so nothing is deleted wrongly.
+          if (bal > 0 && walletTxCount === 0) {
+            msg += `\n\n⚠️ Saldo kantong ini ${formatRp(bal)} tapi tidak ditemukan transaksi dompet yang terhubung — kemungkinan data lama. Saldo dompet TIDAK akan otomatis disesuaikan, silakan periksa manual jika perlu.`;
+          }
+          $('#modal-delete-msg').textContent = msg;
           $('#modal-delete').style.display = 'flex';
           return;
         }
@@ -970,7 +994,7 @@ function openSavingTxSheet(mode='deposit', bucketId=null) {
     bs.innerHTML = APP.savingBuckets.map(b=>`
       <div class="wallet-pill${b.id===bucketId?' selected':''}" data-bucket="${b.id}">
         <span class="wallet-pill-emoji">${b.emoji||'🪣'}</span>
-        <span class="wallet-pill-name">${b.name}</span>
+        <span class="wallet-pill-name">${escapeHtml(b.name)}</span>
       </div>`).join('');
     $$('#saving-bucket-select .wallet-pill').forEach(p=>p.addEventListener('click',()=>{
       $$('#saving-bucket-select .wallet-pill').forEach(x=>x.classList.remove('selected'));
@@ -978,7 +1002,7 @@ function openSavingTxSheet(mode='deposit', bucketId=null) {
     }));
   }
   // Wallet selector
-  buildWalletSelectRow('saving-wallet-select', APP.selectedWalletId);
+  buildWalletPillRow('saving-wallet-select', APP.selectedWalletId, id => APP._savingTxWalletId = id, {showBalance:true});
   openSheet('saving-tx');
   setTimeout(()=>$('#saving-tx-amount')?.focus(),300);
 }
@@ -1266,7 +1290,7 @@ function renderKalenderDetail() {
     <div class="cal-reminder-item">
       <div class="cal-reminder-icon">🔔</div>
       <div class="cal-reminder-info">
-        <div class="cal-reminder-title">${r.title}</div>
+        <div class="cal-reminder-title">${escapeHtml(r.title)}</div>
         ${r.amount?`<div class="cal-reminder-amt">${formatRpC(r.amount)}</div>`:''}
       </div>
       <button class="cal-reminder-del" data-rid="${r.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
@@ -1279,7 +1303,7 @@ function renderKalenderDetail() {
     return `<div class="cal-tx-item">
       <div class="cal-tx-dot ${t.type}">${cat.emoji}</div>
       <div class="cal-tx-info">
-        <div class="cal-tx-desc">${t.desc||'Transaksi'}</div>
+        <div class="cal-tx-desc">${escapeHtml(t.desc)||'Transaksi'}</div>
         <div class="cal-tx-cat">${cat.name}</div>
       </div>
       <div class="cal-tx-amt ${t.type}">${t.type==='income'?'+':'-'}${formatRpC(t.amount)}</div>
@@ -1381,7 +1405,7 @@ function openTxSheet(editId=null) {
   APP.selectedCatId    = tx?.catId  || (type==='income'?'other_inc':'other_exp');
   APP.selectedWalletId = tx?.walletId || APP.wallets[0]?.id || 'default';
   buildCatScroll(type);
-  buildWalletSelectRow('wallet-select-row', APP.selectedWalletId);
+  buildWalletPillRow('wallet-select-row', APP.selectedWalletId, id => APP.selectedWalletId = id);
   updatePhotoPreview();
   $('#tx-cancel-edit').style.display = editId ? '' : 'none';
   openSheet('addtx');
@@ -1417,21 +1441,20 @@ function buildCatScroll(type) {
   });
 }
 
-function buildWalletSelectRow(containerId, selectedId) {
+// Generic wallet-pill selector builder — replaces the 3 near-duplicate
+// builders that used to exist (tx/saving/debt/pay all funnel through this).
+function buildWalletPillRow(containerId, selectedId, onSelect, opts={}) {
   const c = $(`#${containerId}`); if (!c) return;
-  const showBal = containerId === 'saving-wallet-select';
   c.innerHTML = APP.wallets.map(w => {
-    const bal = showBal ? ` <span style="font-size:0.65rem;opacity:0.75;">(${formatRpC(getWalletBalance(w.id))})</span>` : '';
-    return `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-wid="${w.id}">
-      <span class="wallet-pill-emoji">${w.emoji}</span>
-      <span class="wallet-pill-name">${w.name}${bal}</span>
+    const bal = opts.showBalance ? ` <span style="font-size:0.65rem;opacity:0.75;">(${formatRpC(getWalletBalance(w.id))})</span>` : '';
+    return `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-wid="${escapeHtml(w.id)}">
+      <span class="wallet-pill-emoji">${escapeHtml(w.emoji)}</span>
+      <span class="wallet-pill-name">${escapeHtml(w.name)}${bal}</span>
     </div>`;
   }).join('');
   c.querySelectorAll('.wallet-pill').forEach(p => {
     p.addEventListener('click', () => {
-      if (containerId==='wallet-select-row') APP.selectedWalletId    = p.dataset.wid;
-      else if (containerId==='saving-wallet-select') APP._savingTxWalletId = p.dataset.wid;
-      else                                   APP.selectedRecWalletId = p.dataset.wid;
+      onSelect(p.dataset.wid);
       c.querySelectorAll('.wallet-pill').forEach(x => x.classList.remove('selected'));
       p.classList.add('selected');
     });
@@ -1526,7 +1549,7 @@ function submitWallet() {
 
 // ===================== TRANSFER SHEET =====================
 function openTransferSheet(fromId=null) {
-  const opts = () => APP.wallets.map(w=>`<option value="${w.id}">${w.emoji} ${w.name} (${formatRpC(getWalletBalance(w.id))})</option>`).join('');
+  const opts = () => APP.wallets.map(w=>`<option value="${w.id}">${w.emoji} ${escapeHtml(w.name)} (${formatRpC(getWalletBalance(w.id))})</option>`).join('');
   $('#transfer-from').innerHTML = opts();
   $('#transfer-to').innerHTML   = opts();
   if (fromId) $('#transfer-from').value = fromId;
@@ -1549,54 +1572,6 @@ function submitTransfer() {
   renderDompet(); renderDashboard();
 }
 
-// ===================== RECURRING SHEET =====================
-function setRecType(type) {
-  APP.recType = type;
-  $('#rec-type-income').classList.toggle('active', type==='income');
-  $('#rec-type-expense').classList.toggle('active', type==='expense');
-  $('#rec-submit').classList.toggle('expense-mode', type==='expense');
-}
-function openRecSheet(editId=null) {
-  APP.editingRecId = editId;
-  const r = editId ? APP.recurringTx.find(x=>x.id===editId) : null;
-  $('#rec-sheet-title').textContent = editId ? '✏️ Edit Berulang' : '🔁 Tambah Berulang';
-  setRecType(r?.type||'expense');
-  $('#rec-amount').value = r ? r.amount.toLocaleString('id-ID') : '';
-  $('#rec-desc').value   = r?.desc || '';
-  $('#rec-start').value  = r?.startDate || todayStr();
-  APP.recFreq = r?.freq || 'monthly';
-  $$('#freq-pills .pill').forEach(p => p.classList.toggle('active', p.dataset.freq===APP.recFreq));
-  APP.selectedRecWalletId = r?.walletId || APP.wallets[0]?.id || 'default';
-  buildWalletSelectRow('rec-wallet-row', APP.selectedRecWalletId);
-  openSheet('rec'); setTimeout(()=>$('#rec-amount').focus(),300);
-}
-function submitRec() {
-  const amount    = parseAmt($('#rec-amount').value);
-  const desc      = $('#rec-desc').value.trim();
-  const startDate = $('#rec-start').value;
-  if (!amount)    { showToast('⚠️ Nominal tidak boleh kosong','error'); return; }
-  if (!desc)      { showToast('⚠️ Deskripsi tidak boleh kosong','error'); return; }
-  if (!startDate) { showToast('⚠️ Tanggal mulai tidak boleh kosong','error'); return; }
-  let nextRun = startDate;
-  const today = new Date(); today.setHours(0,0,0,0);
-  while (new Date(nextRun+'T00:00:00') < today) {
-    const nd = new Date(nextRun+'T00:00:00');
-    if      (APP.recFreq==='daily')   nd.setDate(nd.getDate()+1);
-    else if (APP.recFreq==='weekly')  nd.setDate(nd.getDate()+7);
-    else if (APP.recFreq==='monthly') nd.setMonth(nd.getMonth()+1);
-    nextRun = nd.toISOString().split('T')[0];
-  }
-  if (APP.editingRecId) {
-    const idx = APP.recurringTx.findIndex(x=>x.id===APP.editingRecId);
-    if (idx!==-1) APP.recurringTx[idx] = {...APP.recurringTx[idx],type:APP.recType,amount,desc,freq:APP.recFreq,startDate,nextRun,walletId:APP.selectedRecWalletId};
-    showToast('✅ Berulang diperbarui');
-  } else {
-    APP.recurringTx.push({id:genId(),type:APP.recType,amount,desc,freq:APP.recFreq,startDate,nextRun,walletId:APP.selectedRecWalletId,active:true,lastRun:null});
-    showToast('🔁 Transaksi berulang ditambahkan');
-  }
-  persist(); closeSheet('rec'); APP.editingRecId=null;
-  renderRecurring(); renderLainnya();
-}
 
 function markDebtUnpaid(id) {
   const idx = APP.debts.findIndex(d=>d.id===id); if (idx===-1) return;
@@ -1654,11 +1629,8 @@ function submitSaving() {
 }
 
 // ===================== DEBT SHEET =====================
-let APP_debtType = 'borrowed'; // 'borrowed' | 'lent'
-let APP_debtWalletId = '';
-
 function setDebtType(dtype) {
-  APP_debtType = dtype;
+  APP.debtType = dtype;
   $$('#debt-type-toggle .debt-type-btn').forEach(b => {
     const isActive = b.dataset.dtype === dtype;
     b.classList.toggle('active', isActive);
@@ -1681,26 +1653,10 @@ function openDebtSheet(editId=null) {
   $('#debt-amount').value = d ? d.amount.toLocaleString('id-ID') : '';
   $('#debt-due').value    = d?.dueDate || '';
   $('#debt-note').value   = d?.note   || '';
-  APP_debtWalletId = d?.walletId || APP.wallets[0]?.id || 'default';
-  buildDebtWalletRow(APP_debtWalletId);
+  APP.debtWalletId = d?.walletId || APP.wallets[0]?.id || 'default';
+  buildWalletPillRow('debt-wallet-row', APP.debtWalletId, id => APP.debtWalletId = id);
   openSheet('debt');
   setTimeout(() => $('#debt-name').focus(), 300);
-}
-
-function buildDebtWalletRow(selectedId) {
-  const c = $('#debt-wallet-row'); if (!c) return;
-  c.innerHTML = APP.wallets.map(w =>
-    `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-dwid="${w.id}">
-      <span class="wallet-pill-emoji">${w.emoji}</span>
-      <span class="wallet-pill-name">${w.name}</span>
-    </div>`).join('');
-  c.querySelectorAll('.wallet-pill').forEach(p => {
-    p.addEventListener('click', () => {
-      APP_debtWalletId = p.dataset.dwid;
-      c.querySelectorAll('.wallet-pill').forEach(x=>x.classList.remove('selected'));
-      p.classList.add('selected');
-    });
-  });
 }
 
 function submitDebt() {
@@ -1708,17 +1664,40 @@ function submitDebt() {
   const amount  = parseAmt($('#debt-amount').value);
   const dueDate = $('#debt-due').value;
   const note    = $('#debt-note').value.trim();
-  const dtype   = APP_debtType;
-  const walletId= APP_debtWalletId || APP.wallets[0]?.id || 'default';
+  const dtype   = APP.debtType;
+  const walletId= APP.debtWalletId || APP.wallets[0]?.id || 'default';
   if (!name)    { showToast('⚠️ Nama tidak boleh kosong','error'); return; }
   if (!amount)  { showToast('⚠️ Jumlah tidak boleh kosong','error'); return; }
   if (!dueDate) { showToast('⚠️ Jatuh tempo tidak boleh kosong','error'); return; }
 
   if (APP.editingDebtId) {
-    // Edit — don't re-create transaction, just update metadata
     const idx = APP.debts.findIndex(d=>d.id===APP.editingDebtId);
-    if (idx!==-1) APP.debts[idx] = {...APP.debts[idx], name, amount, dueDate, note, dtype, walletId};
-    showToast('✅ Hutang diperbarui');
+    if (idx!==-1) {
+      const old = APP.debts[idx];
+      const changed = old.amount !== amount || old.walletId !== walletId || old.dtype !== dtype;
+      APP.debts[idx] = {...old, name, amount, dueDate, note, dtype, walletId};
+      if (changed) {
+        // The initial transaction auto-created when this debt was added
+        // (linked via debtRef) can drift out of sync with the debt if the
+        // amount/wallet/type is edited later. We never change it silently —
+        // only if the user explicitly confirms, since it affects historical
+        // saldo. Declining leaves old history untouched.
+        const linkedTx = APP.transactions.find(t => t.debtRef === old.id);
+        if (linkedTx && confirm('Nominal/dompet/jenis hutang berubah.\n\nSesuaikan juga transaksi awal yang sudah tercatat di histori? (saldo akan ikut disesuaikan)\n\nPilih "Batal" jika ingin histori lama tetap seperti semula.')) {
+          const txType = dtype==='borrowed' ? 'income' : 'expense';
+          linkedTx.type     = txType;
+          linkedTx.amount   = amount;
+          linkedTx.walletId = walletId;
+          linkedTx.catId    = txType==='income' ? 'other_inc' : 'other_exp';
+          linkedTx.desc     = dtype==='borrowed' ? `Hutang dari ${name}` : `Pinjaman ke ${name}`;
+          showToast('✅ Hutang & transaksi terkait diperbarui');
+        } else {
+          showToast('✅ Hutang diperbarui (histori transaksi lama tidak diubah)');
+        }
+      } else {
+        showToast('✅ Hutang diperbarui');
+      }
+    }
   } else {
     const debt = {
       id:genId(), name, amount, dueDate, note,
@@ -1750,13 +1729,10 @@ function submitDebt() {
 }
 
 // ===================== PAYMENT SHEET =====================
-let APP_payDebtId = '';
-let APP_payWalletId = '';
-
 function openPaymentSheet(debtId) {
   const d = APP.debts.find(x=>x.id===debtId); if (!d) return;
-  APP_payDebtId  = debtId;
-  APP_payWalletId = d.walletId || APP.wallets[0]?.id || 'default';
+  APP.payDebtId  = debtId;
+  APP.payWalletId = d.walletId || APP.wallets[0]?.id || 'default';
 
   const paidSoFar = d.paidAmount || 0;
   const remaining = d.amount - paidSoFar;
@@ -1784,36 +1760,20 @@ function openPaymentSheet(debtId) {
     $('#pay-amount').value = remaining.toLocaleString('id-ID');
   };
 
-  buildPayWalletRow(APP_payWalletId);
+  buildWalletPillRow('pay-wallet-row', APP.payWalletId, id => APP.payWalletId = id);
   openSheet('pay');
   setTimeout(() => $('#pay-amount').focus(), 300);
-}
-
-function buildPayWalletRow(selectedId) {
-  const c = $('#pay-wallet-row'); if (!c) return;
-  c.innerHTML = APP.wallets.map(w =>
-    `<div class="wallet-pill${w.id===selectedId?' selected':''}" data-pwid="${w.id}">
-      <span class="wallet-pill-emoji">${w.emoji}</span>
-      <span class="wallet-pill-name">${w.name}</span>
-    </div>`).join('');
-  c.querySelectorAll('.wallet-pill').forEach(p => {
-    p.addEventListener('click', () => {
-      APP_payWalletId = p.dataset.pwid;
-      c.querySelectorAll('.wallet-pill').forEach(x=>x.classList.remove('selected'));
-      p.classList.add('selected');
-    });
-  });
 }
 
 function submitPayment() {
   const amount   = parseAmt($('#pay-amount').value);
   const date     = $('#pay-date').value;
   const note     = $('#pay-note').value.trim();
-  const walletId = APP_payWalletId || APP.wallets[0]?.id || 'default';
+  const walletId = APP.payWalletId || APP.wallets[0]?.id || 'default';
   if (!amount)   { showToast('⚠️ Masukkan jumlah pembayaran','error'); return; }
   if (!date)     { showToast('⚠️ Tanggal tidak boleh kosong','error'); return; }
 
-  const idx = APP.debts.findIndex(d=>d.id===APP_payDebtId);
+  const idx = APP.debts.findIndex(d=>d.id===APP.payDebtId);
   if (idx===-1) return;
   const d = APP.debts[idx];
   const remaining = d.amount - (d.paidAmount||0);
@@ -1864,8 +1824,27 @@ function confirmDelete() {
   if      (type==='tx')     { APP.transactions=APP.transactions.filter(t=>t.id!==id); refreshCurrentPage(); showToast('🗑️ Transaksi dihapus','info'); }
   else if (type==='goal')   { APP.goals=APP.goals.filter(g=>g.id!==id); renderImpian(); renderLainnya(); showToast('🗑️ Impian dihapus','info'); }
   else if (type==='debt')   { APP.debts=APP.debts.filter(d=>d.id!==id); renderHutang(); renderLainnya(); showToast('🗑️ Hutang dihapus','info'); }
-  else if (type==='wallet') { APP.wallets=APP.wallets.filter(w=>w.id!==id); renderDompet(); renderDashboard(); showToast('🗑️ Dompet dihapus','info'); }
-  else if (type==='rec')    { APP.recurringTx=APP.recurringTx.filter(r=>r.id!==id); renderRecurring(); showToast('🗑️ Dihapus','info'); }
+  else if (type==='wallet') {
+    const remaining = APP.wallets.filter(w=>w.id!==id);
+    if (!remaining.length) {
+      showToast('⚠️ Tidak bisa menghapus dompet terakhir','error');
+    } else {
+      // Reassign any transactions/debts still pointing at this wallet to the
+      // next remaining wallet, instead of leaving them orphaned (which used
+      // to silently exclude their amount from the total net worth).
+      const fallbackId = remaining[0].id;
+      let moved = 0;
+      APP.transactions.forEach(t => {
+        if (t.walletId === id)   { t.walletId = fallbackId; moved++; }
+        if (t.toWalletId === id) { t.toWalletId = fallbackId; }
+      });
+      APP.debts.forEach(d => { if (d.walletId === id) d.walletId = fallbackId; });
+      APP.savingTxs.forEach(t => { if (t.walletId === id) t.walletId = fallbackId; });
+      APP.wallets = remaining;
+      renderDompet(); renderDashboard();
+      showToast(moved ? `🗑️ Dompet dihapus, ${moved} transaksi dipindah ke ${remaining[0].name}` : '🗑️ Dompet dihapus','info');
+    }
+  }
   else if (type==='bucket') {
     // Remove linked wallet transactions using bucketId field (stored on new entries)
     // This returns saldo back to the wallet
@@ -1902,7 +1881,7 @@ function exportCSV() {
   showToast('📊 CSV diekspor');
 }
 function exportJSON() {
-  const data = {app:'Azar Finance',version:'3.0',exported:new Date().toISOString(),transactions:APP.transactions,goals:APP.goals,debts:APP.debts,wallets:APP.wallets,recurringTx:APP.recurringTx};
+  const data = {app:'Azar Finance',version:APP_VERSION,exported:new Date().toISOString(),transactions:APP.transactions,goals:APP.goals,debts:APP.debts,wallets:APP.wallets};
   dlBlob(JSON.stringify(data,null,2), `azar-finance-backup-${todayStr()}.json`, 'application/json');
   showToast('💾 JSON diekspor');
 }
@@ -1915,17 +1894,14 @@ function importJSON(file) {
       if (Array.isArray(data)) {
         APP.transactions=[...data]; APP.goals=[]; APP.debts=[];
         APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
-        APP.recurringTx=[];
       } else {
         APP.transactions = data.transactions || [];
         APP.goals        = data.goals        || [];
         APP.debts        = data.debts        || [];
         APP.wallets      = data.wallets?.length ? data.wallets : [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
-        APP.recurringTx  = data.recurringTx  || [];
       }
       await persist();
-      APP.selectedWalletId    = APP.wallets[0]?.id || 'default';
-      APP.selectedRecWalletId = APP.wallets[0]?.id || 'default';
+      APP.selectedWalletId = APP.wallets[0]?.id || 'default';
       renderDashboard(); renderRiwayat();
       showToast(`✅ ${APP.transactions.length} transaksi diimpor`);
     } catch(err) { showToast('❌ Gagal import: '+err.message,'error',3500); }
@@ -1952,7 +1928,13 @@ function startNotifLoop() {
   const check = () => {
     const now  = new Date();
     const [h,m] = APP.notifTime.split(':').map(Number);
-    if (now.getHours()===h && now.getMinutes()===m) {
+    // Use >= instead of an exact minute match — background tabs / mobile
+    // browsers can throttle setInterval so the precise minute is sometimes
+    // skipped entirely. Checking "have we passed the target time today AND
+    // not already notified today" means a late check still catches up.
+    const targetMinutes = h*60 + m;
+    const nowMinutes     = now.getHours()*60 + now.getMinutes();
+    if (nowMinutes >= targetMinutes) {
       const k = 'azf_nlast';
       const _nlast = (() => { try { return localStorage.getItem(k); } catch { return ''; } })();
       if (_nlast !== todayStr()) {
@@ -1974,12 +1956,15 @@ async function init() {
   $('#dark-toggle-settings').checked  = APP.darkMode;
   if (APP.notifEnabled) { $('#notif-time-row').style.display=''; $('#notif-time').value=APP.notifTime; }
   if (APP.notifEnabled) scheduleNotif();
-  checkRecurring();
   renderDashboard();
   renderBudget();
   renderTabungan();
   $('#fab-btn').style.display = 'none'; // dashboard page has no FAB
-  setTimeout(() => { $('#app').style.display='flex'; }, 2250);
+  setTimeout(() => {
+    $('#app').style.display='flex';
+    // PWA shortcut support: "Tambah Pemasukan/Pengeluaran" launches with #add
+    if (location.hash === '#add') { openTxSheet(); history.replaceState(null,'',location.pathname); }
+  }, 2250);
 
   // BOTTOM NAV
   $$('.nav-item').forEach(btn => btn.addEventListener('click', () => navigateTo(btn.dataset.page, true)));
@@ -1992,7 +1977,6 @@ async function init() {
     const p = APP.currentPage;
     if (p==='impian')    { openGoalSheet(); return; }
     if (p==='hutang')    { openDebtSheet(); return; }
-    if (p==='recurring') { openRecSheet();  return; }
     if (p==='dompet')    { openWalletSheet(); return; }
     openTxSheet();
   });
@@ -2030,7 +2014,7 @@ async function init() {
   $('#photo-input-gallery').addEventListener('change', e => { handlePhotoFile(e.target.files[0]); e.target.value=''; });
 
   // AUTO FORMAT AMOUNT INPUTS
-  ['tx-amount','goal-target','goal-saved','saving-amount','debt-amount','wallet-balance','transfer-amount','rec-amount'].forEach(id => {
+  ['tx-amount','goal-target','goal-saved','saving-amount','debt-amount','wallet-balance','transfer-amount'].forEach(id => {
     const el = $(`#${id}`); if (!el) return;
     el.addEventListener('input', () => fmtAmtInput(el));
     el.addEventListener('keydown', e => {
@@ -2141,16 +2125,6 @@ async function init() {
   $('#transfer-cancel').addEventListener('click',  () => closeSheet('transfer'));
   $('#transfer-backdrop').addEventListener('click',() => closeSheet('transfer'));
 
-  // RECURRING TYPE + FREQ + SHEET
-  $('#rec-type-income').addEventListener('click',  () => setRecType('income'));
-  $('#rec-type-expense').addEventListener('click', () => setRecType('expense'));
-  $$('#freq-pills .pill').forEach(p => p.addEventListener('click', () => {
-    APP.recFreq=p.dataset.freq; $$('#freq-pills .pill').forEach(x=>x.classList.remove('active')); p.classList.add('active');
-  }));
-  $('#rec-submit').addEventListener('click',  submitRec);
-  $('#rec-cancel').addEventListener('click',  () => { closeSheet('rec'); APP.editingRecId=null; });
-  $('#rec-backdrop').addEventListener('click',() => { closeSheet('rec'); APP.editingRecId=null; });
-
   // GOAL SHEET
   $('#goal-submit-btn').addEventListener('click', submitGoal);
   $('#goal-cancel').addEventListener('click',     () => { closeSheet('goal'); APP.editingGoalId=null; });
@@ -2193,7 +2167,7 @@ async function init() {
   $('#btn-reset').addEventListener('click',    () => $('#modal-reset').style.display='flex');
   $('#reset-cancel').addEventListener('click', () => $('#modal-reset').style.display='none');
   $('#reset-confirm').addEventListener('click', async () => {
-    APP.transactions=[]; APP.goals=[]; APP.debts=[]; APP.recurringTx=[];
+    APP.transactions=[]; APP.goals=[]; APP.debts=[];
     APP.budgets=[]; APP.reminders=[]; APP.savingBuckets=[]; APP.savingTxs=[];
     APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
     await persist();
@@ -2250,28 +2224,13 @@ async function init() {
     const wDel      = e.target.closest('[data-wallet-del]');
     if (wTransfer) { openTransferSheet(wTransfer.dataset.transfer);    return; }
     if (wEdit)     { openWalletSheet(wEdit.dataset.walletEdit);        return; }
-    if (wDel)      { openDeleteModal('wallet', wDel.dataset.walletDel, 'Dompet ini akan dihapus. Transaksinya tetap ada.'); return; }
-
-    // Recurring actions
-    const rEdit = e.target.closest('[data-rec-edit]');
-    const rDel  = e.target.closest('[data-rec-del]');
-    if (rEdit) { openRecSheet(rEdit.dataset.recEdit); return; }
-    if (rDel)  { openDeleteModal('rec', rDel.dataset.recDel, 'Transaksi berulang ini akan dihapus.'); return; }
-  });
-
-  // Recurring toggle (change event)
-  document.addEventListener('change', e => {
-    const tog = e.target.closest('[data-rec-toggle]');
-    if (tog) {
-      const idx = APP.recurringTx.findIndex(r=>r.id===tog.dataset.recToggle);
-      if (idx!==-1) { APP.recurringTx[idx].active = e.target.checked; persist(); renderRecurring(); }
-    }
+    if (wDel)      { openDeleteModal('wallet', wDel.dataset.walletDel, 'Dompet ini akan dihapus. Transaksinya akan dipindahkan ke dompet lain, tidak hilang.'); return; }
   });
 
   // KEYBOARD ESC
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['addtx','goal','saving','debt','wallet','transfer','rec','pay'].forEach(closeSheet);
+      ['addtx','goal','saving','debt','wallet','transfer','pay'].forEach(closeSheet);
       $('#modal-delete').style.display='none';
       $('#modal-reset').style.display='none';
       $('#modal-photo').style.display='none';

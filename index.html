@@ -63,12 +63,6 @@
     </div>
   </header>
 
-  <!-- Recurring due banner -->
-  <div id="recurring-banner" class="recurring-banner" style="display:none;">
-    <span id="recurring-banner-text">🔁 Ada transaksi berulang yang perlu dicatat</span>
-    <button id="recurring-banner-btn" class="banner-btn">Proses</button>
-  </div>
-
   <!-- ======== DASHBOARD ======== -->
   <section id="page-dashboard" class="page active">
     <div class="scroll-area">
@@ -480,7 +474,7 @@
       <div class="app-info">
         <svg viewBox="0 0 48 48" fill="none" width="36" height="36"><rect x="4" y="4" width="40" height="40" rx="14" fill="url(#gi2)"/><circle cx="24" cy="24" r="6" fill="white" opacity="0.9"/><defs><linearGradient id="gi2" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
         <div class="app-info-name">Azar Finance</div>
-        <div class="app-info-ver">v4.0 · PWA Ready</div>
+        <div class="app-info-ver">v4.2 · PWA Ready</div>
         <div class="app-info-badge">Update v4 · Tabungan · Budget · Kalender</div>
       </div>
     </div>
@@ -620,44 +614,6 @@
   </div>
   <button class="submit-btn expense-mode" id="transfer-submit">Proses Transfer</button>
   <button class="cancel-btn" id="transfer-cancel" style="margin-top:10px;">Batal</button>
-  <div style="height:8px;"></div>
-</div>
-
-<!-- ADD / EDIT RECURRING -->
-<div class="sheet-backdrop" id="rec-backdrop"></div>
-<div class="bottom-sheet" id="sheet-rec">
-  <div class="sheet-drag"></div>
-  <h3 class="sheet-title" id="rec-sheet-title">🔁 Tambah Transaksi Berulang</h3>
-  <div class="type-toggle" style="margin-top:4px;">
-    <button class="type-btn active income-btn" id="rec-type-income">Pemasukan</button>
-    <button class="type-btn expense-btn" id="rec-type-expense">Pengeluaran</button>
-  </div>
-  <div class="input-group">
-    <label class="input-label">Nominal (Rp)</label>
-    <div class="amount-wrapper"><span class="currency-prefix">Rp</span><input type="text" id="rec-amount" class="amount-input" placeholder="0" inputmode="numeric"/></div>
-  </div>
-  <div class="input-group">
-    <label class="input-label">Deskripsi</label>
-    <input type="text" id="rec-desc" class="text-input" placeholder="Gaji, Cicilan, Netflix..." autocomplete="off"/>
-  </div>
-  <div class="input-group">
-    <label class="input-label">Frekuensi</label>
-    <div class="freq-pills" id="freq-pills">
-      <button class="pill active" data-freq="monthly">Bulanan</button>
-      <button class="pill" data-freq="weekly">Mingguan</button>
-      <button class="pill" data-freq="daily">Harian</button>
-    </div>
-  </div>
-  <div class="input-group" id="rec-day-group">
-    <label class="input-label">Tanggal Mulai</label>
-    <input type="date" id="rec-start" class="text-input date-input"/>
-  </div>
-  <div class="input-group">
-    <label class="input-label">Dompet</label>
-    <div class="wallet-select-row" id="rec-wallet-row"></div>
-  </div>
-  <button class="submit-btn" id="rec-submit">Simpan</button>
-  <button class="cancel-btn" id="rec-cancel" style="margin-top:10px;">Batal</button>
   <div style="height:8px;"></div>
 </div>
 
