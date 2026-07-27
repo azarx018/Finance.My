@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.2 — script.js
+   AZAR FINANCE v4.3 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.2';
+const APP_VERSION = '4.3';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -1659,7 +1659,7 @@ function openDebtSheet(editId=null) {
   setTimeout(() => $('#debt-name').focus(), 300);
 }
 
-function submitDebt() {
+async function submitDebt() {
   const name    = $('#debt-name').value.trim();
   const amount  = parseAmt($('#debt-amount').value);
   const dueDate = $('#debt-due').value;
@@ -1678,12 +1678,18 @@ function submitDebt() {
       APP.debts[idx] = {...old, name, amount, dueDate, note, dtype, walletId};
       if (changed) {
         // The initial transaction auto-created when this debt was added
-        // (linked via debtRef) can drift out of sync with the debt if the
-        // amount/wallet/type is edited later. We never change it silently —
-        // only if the user explicitly confirms, since it affects historical
+        // (linked via debtRef, tagged "[Otomatis]" so it's never confused
+        // with a later cicilan/payment transaction that shares the same
+        // debtRef) can drift out of sync with the debt if the amount/
+        // wallet/type is edited later. We never change it silently — only
+        // if the user explicitly confirms, since it affects historical
         // saldo. Declining leaves old history untouched.
-        const linkedTx = APP.transactions.find(t => t.debtRef === old.id);
-        if (linkedTx && confirm('Nominal/dompet/jenis hutang berubah.\n\nSesuaikan juga transaksi awal yang sudah tercatat di histori? (saldo akan ikut disesuaikan)\n\nPilih "Batal" jika ingin histori lama tetap seperti semula.')) {
+        const linkedTx = APP.transactions.find(t => t.debtRef === old.id && t.note?.startsWith('[Otomatis]'));
+        const wantSync = linkedTx && await askConfirm(
+          'Nominal/dompet/jenis hutang berubah.\n\nSesuaikan juga transaksi awal yang sudah tercatat di histori? Saldo akan ikut disesuaikan.\n\nPilih "Tidak" jika ingin histori lama tetap seperti semula.',
+          {title:'Sesuaikan histori transaksi?', icon:'🔄'}
+        );
+        if (wantSync) {
           const txType = dtype==='borrowed' ? 'income' : 'expense';
           linkedTx.type     = txType;
           linkedTx.amount   = amount;
@@ -1813,6 +1819,26 @@ function submitPayment() {
 }
 
 // ===================== DELETE =====================
+// Generic in-app yes/no confirm, used instead of window.confirm() — native
+// confirm() dialogs can be unreliable or suppressed in installed/home-screen
+// PWA contexts on some platforms. This reuses the app's own modal styling
+// and always resolves via explicit button tap, so behavior is consistent
+// everywhere the app runs.
+let _pendingConfirmResolve = null;
+function askConfirm(message, {title='Konfirmasi', icon='❓'}={}) {
+  return new Promise(resolve => {
+    _pendingConfirmResolve = resolve;
+    $('#modal-generic-title').textContent = title;
+    $('#modal-generic-icon').textContent  = icon;
+    $('#modal-generic-msg').textContent   = message;
+    $('#modal-generic-confirm').style.display = 'flex';
+  });
+}
+function _resolveConfirm(val) {
+  $('#modal-generic-confirm').style.display = 'none';
+  if (_pendingConfirmResolve) { _pendingConfirmResolve(val); _pendingConfirmResolve = null; }
+}
+
 function openDeleteModal(type, id, msg='Tindakan ini tidak dapat dibatalkan.') {
   APP.deleteTarget = {type,id};
   $('#modal-delete-msg').textContent = msg;
@@ -1832,6 +1858,7 @@ function confirmDelete() {
       // Reassign any transactions/debts still pointing at this wallet to the
       // next remaining wallet, instead of leaving them orphaned (which used
       // to silently exclude their amount from the total net worth).
+      const deletedWallet = APP.wallets.find(w=>w.id===id);
       const fallbackId = remaining[0].id;
       let moved = 0;
       APP.transactions.forEach(t => {
@@ -1840,9 +1867,17 @@ function confirmDelete() {
       });
       APP.debts.forEach(d => { if (d.walletId === id) d.walletId = fallbackId; });
       APP.savingTxs.forEach(t => { if (t.walletId === id) t.walletId = fallbackId; });
+      // IMPORTANT: the deleted wallet's own "Saldo Awal" (initialBalance) is
+      // a property of the wallet object itself — it has no transaction
+      // representation, so reassigning transactions alone does NOT preserve
+      // it. Fold it into the fallback wallet explicitly so no money is lost.
+      const fallbackWallet = remaining.find(w=>w.id===fallbackId);
+      if (fallbackWallet && deletedWallet?.initialBalance) {
+        fallbackWallet.initialBalance = (fallbackWallet.initialBalance||0) + deletedWallet.initialBalance;
+      }
       APP.wallets = remaining;
       renderDompet(); renderDashboard();
-      showToast(moved ? `🗑️ Dompet dihapus, ${moved} transaksi dipindah ke ${remaining[0].name}` : '🗑️ Dompet dihapus','info');
+      showToast(moved ? `🗑️ Dompet dihapus, ${moved} transaksi & saldo dipindah ke ${remaining[0].name}` : '🗑️ Dompet dihapus','info');
     }
   }
   else if (type==='bucket') {
@@ -2162,6 +2197,11 @@ async function init() {
   $('#modal-cancel').addEventListener('click',  () => { $('#modal-delete').style.display='none'; APP.deleteTarget=null; });
   $('#modal-confirm').addEventListener('click', confirmDelete);
   $('#modal-delete').addEventListener('click',  e => { if(e.target===$('#modal-delete')){ $('#modal-delete').style.display='none'; APP.deleteTarget=null; } });
+
+  // GENERIC CONFIRM MODAL
+  $('#modal-generic-yes').addEventListener('click', () => _resolveConfirm(true));
+  $('#modal-generic-no').addEventListener('click',  () => _resolveConfirm(false));
+  $('#modal-generic-confirm').addEventListener('click', e => { if(e.target===$('#modal-generic-confirm')) _resolveConfirm(false); });
 
   // RESET MODAL
   $('#btn-reset').addEventListener('click',    () => $('#modal-reset').style.display='flex');
