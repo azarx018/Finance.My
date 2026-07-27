@@ -1,12 +1,12 @@
 /* ================================================
-   AZAR FINANCE v4.3 — sw.js (Service Worker)
+   AZAR FINANCE v4.4 — sw.js (Service Worker)
    Offline Support · Cache First Strategy
    NOTE: CACHE_NAME must match the app version in script.js
    (APP_VERSION) and index.html (.app-info-ver). Bumping it on
    every release forces old cached assets to be replaced.
    ================================================ */
 
-const CACHE_NAME = 'azar-finance-v4.3';
+const CACHE_NAME = 'azar-finance-v4.4';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -108,8 +108,8 @@ self.addEventListener('push', (event) => {
     data.then((payload) =>
       self.registration.showNotification(payload.title || 'Azar Finance', {
         body: payload.body || 'Ada pengingat untuk Anda.',
-        icon: './icon-192.png',
-        badge: './icon-192.png',
+        icon: './icon-192.svg',
+        badge: './icon-192.svg',
         vibrate: [200, 100, 200],
         tag: 'azar-reminder',
         renotify: true,

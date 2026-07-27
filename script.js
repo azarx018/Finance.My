@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.3 — script.js
+   AZAR FINANCE v4.4 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.3';
+const APP_VERSION = '4.4';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -2227,6 +2227,26 @@ async function init() {
   $('#btn-backup-now').addEventListener('click',  () => doAutoBackup(false));
   $('#btn-import').addEventListener('click',      () => $('#import-file').click());
   $('#import-file').addEventListener('change',    e => { importJSON(e.target.files[0]); e.target.value=''; });
+
+  // REFRESH APP — the app shell has overflow:hidden (no pull-to-refresh),
+  // and installed/standalone PWAs have no browser reload button. This clears
+  // only the static-asset Cache Storage (HTML/CSS/JS) so the next load
+  // fetches fresh files, then hard-reloads. It never touches IndexedDB, so
+  // no financial data is affected.
+  $('#btn-refresh-app')?.addEventListener('click', async () => {
+    showToast('🔄 Memeriksa update...');
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (e) { /* ignore — still reload below even if this fails */ }
+    location.reload();
+  });
 
   // GLOBAL DELEGATION — all clickable data-attributes
   document.addEventListener('click', e => {
