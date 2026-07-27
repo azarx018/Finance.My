@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.5 — script.js
+   AZAR FINANCE v4.6 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.5';
+const APP_VERSION = '4.6';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -1199,13 +1199,13 @@ function openBudgetSheet(editId=null, preselectCat=null) {
 function renderBudgetCatPicker(avail, selectedCatId) {
   const bcs=$('#budget-cat-scroll'); if(!bcs) return;
   const customIds = new Set(APP.customCats.map(c=>c.id));
-  bcs.innerHTML = avail.map(c => {
+  bcs.innerHTML = `<div class="cat-pill add-cat-pill" id="budget-add-cat-btn"><span class="cat-emoji">➕</span><span class="cat-label">Baru</span></div>` + avail.map(c => {
     const isCustom = customIds.has(c.id);
     return `<div class="cat-pill expense-cat${selectedCatId===c.id?' selected':''}" data-cat="${c.id}">
       <span class="cat-emoji">${c.emoji}</span><span class="cat-label">${escapeHtml(c.name)}</span>
       ${isCustom?`<span class="cat-del-x" data-catdel="${c.id}" title="Hapus kategori">✕</span>`:''}
     </div>`;
-  }).join('') + `<div class="cat-pill add-cat-pill" id="budget-add-cat-btn"><span class="cat-emoji">➕</span><span class="cat-label">Kategori Baru</span></div>`;
+  }).join('');
 
   $$('#budget-cat-scroll .cat-pill[data-cat]').forEach(p=>p.addEventListener('click',(e)=>{
     if (e.target.closest('[data-catdel]')) return; // handled separately below
