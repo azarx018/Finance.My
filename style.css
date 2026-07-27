@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.6 — style.css
+   AZAR FINANCE v4.7 — style.css
    Redesign: Clean · Modern · Light-First · Emerald
    ================================================ */
 
@@ -165,6 +165,15 @@ input,select,textarea{font-family:inherit;outline:none;}
 .qa-btn.income .qa-icon{background:linear-gradient(135deg,#16a34a,#22c55e);}
 .qa-btn.expense .qa-icon{background:linear-gradient(135deg,#ef4444,#dc2626);}
 .qa-btn.transfer .qa-icon{background:linear-gradient(135deg,#3b82f6,#2563eb);}
+
+/* Quick Insights */
+.quick-insights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.qi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:11px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all var(--tr);box-shadow:var(--shadow-sm);}
+.qi-card:active{transform:scale(0.97);}
+.qi-icon{font-size:1.3rem;flex-shrink:0;width:34px;height:34px;border-radius:10px;background:var(--bg-pill);display:flex;align-items:center;justify-content:center;}
+.qi-text{min-width:0;}
+.qi-label{font-size:0.62rem;color:var(--txt-muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qi-val{font-size:0.76rem;font-weight:700;color:var(--txt-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* Wallet scroll row */
 .wallet-scroll-row{display:flex;gap:9px;overflow-x:auto;padding-bottom:4px;margin-bottom:16px;scrollbar-width:none;}

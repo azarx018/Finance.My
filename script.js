@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.6 — script.js
+   AZAR FINANCE v4.7 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.6';
+const APP_VERSION = '4.7';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -513,8 +513,16 @@ function renderDashboard() {
   const {income, expense} = calcTotals(list);
   const walletStats = computeWalletStats();
   const nw   = APP.wallets.reduce((s,w) => s + (walletStats[w.id]?.balance||0), 0);
-  const savings = income - expense;
-  const savRate = income>0 ? Math.round((savings/income)*100) : 0;
+  // "Savings" here means income not spent on real (external) expenses. Money
+  // moved into a Tabungan bucket (catId 'saving_transfer') is recorded as an
+  // expense/income pair so wallet balances stay accurate, but it's still the
+  // user's own money — just relocated, not spent. Excluding it here means
+  // depositing into a savings bucket correctly INCREASES the savings rate
+  // instead of looking like spending.
+  const listForSavings = list.filter(t => t.catId !== 'saving_transfer');
+  const {income: incSav, expense: expSav} = calcTotals(listForSavings);
+  const savings = incSav - expSav;
+  const savRate = incSav>0 ? Math.round((savings/incSav)*100) : 0;
 
   // Balance card
   $('#net-worth-display').textContent = formatRp(nw);
@@ -539,6 +547,44 @@ function renderDashboard() {
   if(sbcRate) sbcRate.style.color = savRate>=30?'var(--income)':savRate>=10?'var(--warn)':'var(--expense)';
   if(sbcDesc) sbcDesc.textContent = savRate>=30?'Bagus! Pertahankan 💪':savRate>=10?'Lumayan, bisa lebih baik':'Perlu perhatian lebih';
   if(ringFill){ const circ=138.2; ringFill.style.strokeDashoffset = circ - (Math.min(savRate,100)/100)*circ; }
+
+  // Quick Insights
+  let totalHutang=0, totalPiutang=0;
+  APP.debts.forEach(d => {
+    const remaining = d.amount - (d.paidAmount||0);
+    if (d.dtype==='borrowed') totalHutang += remaining; else totalPiutang += remaining;
+  });
+  const qiDebtVal = $('#qi-debt-val');
+  if (qiDebtVal) qiDebtVal.textContent = (totalHutang||totalPiutang) ? `${formatRpC(totalHutang)} / ${formatRpC(totalPiutang)}` : 'Tidak ada';
+
+  const bMonth = getBudgetMonth();
+  const monthBudgets = APP.budgets.filter(b=>b.month===bMonth);
+  const monthExpTxs  = APP.transactions.filter(t=>t.date.startsWith(bMonth)&&t.type==='expense');
+  const qiBudgetVal = $('#qi-budget-val');
+  if (qiBudgetVal) {
+    if (!monthBudgets.length) { qiBudgetVal.textContent = 'Belum ada budget'; }
+    else {
+      const totalLimit = monthBudgets.reduce((s,b)=>s+b.limit,0);
+      const totalUsed  = monthBudgets.reduce((s,b)=>s+monthExpTxs.filter(t=>t.catId===b.cat).reduce((ss,t)=>ss+t.amount,0),0);
+      const pct = totalLimit>0 ? Math.round((totalUsed/totalLimit)*100) : 0;
+      qiBudgetVal.textContent = `${pct}% terpakai`;
+      qiBudgetVal.style.color = pct>=100?'var(--expense)':pct>=80?'var(--warn)':'var(--txt-primary)';
+    }
+  }
+
+  const totalSavingsBuckets = APP.savingBuckets.reduce((s,b)=>s+getBucketBalance(b.id),0);
+  const qiSavVal = $('#qi-savings-val');
+  if (qiSavVal) qiSavVal.textContent = formatRpC(totalSavingsBuckets);
+
+  const topCatMap = {};
+  monthExpTxs.filter(t=>t.catId!=='saving_transfer').forEach(t=>{ topCatMap[t.catId]=(topCatMap[t.catId]||0)+t.amount; });
+  let topCatId=null, topCatAmt=0;
+  Object.entries(topCatMap).forEach(([id,amt])=>{ if(amt>topCatAmt){topCatAmt=amt; topCatId=id;} });
+  const qiTopVal = $('#qi-topcat-val');
+  if (qiTopVal) {
+    if (!topCatId) qiTopVal.textContent = 'Belum ada data';
+    else { const tc=getCatList('expense').find(c=>c.id===topCatId); qiTopVal.textContent = `${tc?.emoji||'💸'} ${tc?.name||'Lainnya'} · ${formatRpC(topCatAmt)}`; }
+  }
 
   // Wallet chips
   const wsr = $('#wallet-scroll-row');
@@ -2180,6 +2226,11 @@ async function init() {
   $('#qa-income')?.addEventListener('click',   () => { APP.selectedType='income';  openTxSheet(); });
   $('#qa-expense')?.addEventListener('click',  () => { APP.selectedType='expense'; openTxSheet(); });
   $('#qa-transfer')?.addEventListener('click', () => openTransferSheet());
+
+  // QUICK INSIGHTS on dashboard — tap a card to jump to its full page
+  $$('#dash-insights .qi-card').forEach(card => {
+    card.addEventListener('click', () => navigateTo(card.dataset.nav, true));
+  });
 
   // ANALITIK FILTER
   $$('#analitik-pills .pill').forEach(btn => btn.addEventListener('click', () => {
