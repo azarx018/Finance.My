@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.4 — style.css
+   AZAR FINANCE v4.5 — style.css
    Redesign: Clean · Modern · Light-First · Emerald
    ================================================ */
 
@@ -584,9 +584,12 @@ input,select,textarea{font-family:inherit;outline:none;}
 .type-btn:active{transform:scale(0.95);}
 .cat-scroll{display:flex;gap:7px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
 .cat-scroll::-webkit-scrollbar{display:none;}
-.cat-pill{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--border);background:var(--bg-pill);cursor:pointer;transition:all var(--tr);}
+.cat-pill{position:relative;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--border);background:var(--bg-pill);cursor:pointer;transition:all var(--tr);}
 .cat-pill.selected{border-color:var(--income);background:var(--income-bg);}
 .cat-pill.selected.expense-cat{border-color:var(--expense);background:var(--expense-bg);}
+.cat-pill.add-cat-pill{border-style:dashed;border-color:var(--txt-muted);opacity:0.85;}
+.cat-pill.add-cat-pill .cat-label{color:var(--txt-muted);}
+.cat-del-x{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:var(--expense);color:#fff;font-size:0.55rem;display:flex;align-items:center;justify-content:center;line-height:1;}
 .cat-emoji{font-size:1.1rem;}
 .cat-label{font-size:0.62rem;color:var(--txt-secondary);white-space:nowrap;}
 .cat-pill.selected .cat-label{color:var(--income);}

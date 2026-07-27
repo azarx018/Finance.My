@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.4 — script.js
+   AZAR FINANCE v4.5 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.4';
+const APP_VERSION = '4.5';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -38,11 +38,22 @@ const EXPENSE_CATS = [
   {id:'savings',name:'Tabungan',emoji:'🐷'},{id:'saving_transfer',name:'Transfer Tabungan',emoji:'🏦'},{id:'other_exp',name:'Lainnya',emoji:'💸'},
 ];
 const WALLET_EMOJIS = ['👛','💼','🏦','💳','📱','💵','🪙','🏧','💎','🏠'];
+const CAT_EMOJIS = ['☕','🍕','🍔','🍜','🍿','🍰','🚗','⛽','🎬','🎵','🐾','👶','🎁','💇','👕','📱','💻','✈️','🏋️','⚽','🎨','📖','🧾','🔧','💊','🐕','🌱','🧴','🎯','💸'];
+
+// Combined category list (built-in + user-added custom categories) for a
+// given type. ALWAYS use this (not INCOME_CATS/EXPENSE_CATS directly) when
+// rendering a category picker or looking up a category by id, so custom
+// categories behave identically to built-in ones everywhere in the app.
+function getCatList(type) {
+  const builtin = type === 'income' ? INCOME_CATS : EXPENSE_CATS;
+  const custom  = APP.customCats.filter(c => c.type === type);
+  return [...builtin, ...custom];
+}
 
 // ===================== STATE =====================
 const APP = {
   transactions:[],goals:[],debts:[],wallets:[],budgets:[],reminders:[],
-  savingBuckets:[], savingTxs:[],
+  savingBuckets:[], savingTxs:[], customCats:[],
   currentPage:'dashboard', prevPage:null,
   editingTxId:null, editingGoalId:null, editingDebtId:null,
   editingWalletId:null, savingGoalId:null,
@@ -152,6 +163,7 @@ async function _persistAsync() {
       idbSet(STORE_DATA, 'reminders',     APP.reminders),
       idbSet(STORE_DATA, 'savingBuckets', APP.savingBuckets),
       idbSet(STORE_DATA, 'savingTxs',     APP.savingTxs),
+      idbSet(STORE_DATA, 'customCats',    APP.customCats),
     ]);
   } catch(e) { showToast('⚠️ Gagal simpan data!','error'); console.error(e); }
 }
@@ -178,7 +190,7 @@ function saveSettings() { return _saveSettingsAsync(); }
 
 async function loadAll() {
   try {
-    const [tx, goals, debts, wallets, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs] = await Promise.all([
+    const [tx, goals, debts, wallets, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs, customCats] = await Promise.all([
       idbGet(STORE_DATA,     KEYS.tx),
       idbGet(STORE_DATA,     KEYS.goals),
       idbGet(STORE_DATA,     KEYS.debts),
@@ -190,6 +202,7 @@ async function loadAll() {
       idbGet(STORE_DATA,     'reminders'),
       idbGet(STORE_DATA,     'savingBuckets'),
       idbGet(STORE_DATA,     'savingTxs'),
+      idbGet(STORE_DATA,     'customCats'),
     ]);
     APP.transactions  = tx             || [];
     APP.goals         = goals          || [];
@@ -199,13 +212,14 @@ async function loadAll() {
     APP.reminders     = reminders      || [];
     APP.savingBuckets = savingBuckets  || [];
     APP.savingTxs     = savingTxs      || [];
+    APP.customCats    = customCats     || [];
     APP.darkMode     = dark    !== undefined ? dark  : false;
     APP.notifEnabled = notif   !== undefined ? notif : false;
     APP.notifTime    = ntime   || '20:00';
   } catch(e) {
     console.error('loadAll error:', e);
     APP.transactions=[]; APP.goals=[]; APP.debts=[];
-    APP.wallets=[]; APP.budgets=[]; APP.reminders=[];
+    APP.wallets=[]; APP.budgets=[]; APP.reminders=[]; APP.customCats=[];
   }
   if (!APP.wallets.length) {
     APP.wallets = [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
@@ -332,7 +346,7 @@ function calcTotals(list) {
 }
 
 function getCat(type, id) {
-  const arr = type==='income' ? INCOME_CATS : EXPENSE_CATS;
+  const arr = getCatList(type);
   return arr.find(c => c.id===id) || arr[arr.length-1];
 }
 
@@ -359,7 +373,7 @@ function getCategoryBreakdown(dateFilter) {
   const map = {};
   list.forEach(t => { const c = t.catId||'other_exp'; map[c]=(map[c]||0)+t.amount; });
   return Object.entries(map).map(([id,val]) => {
-    const cat = EXPENSE_CATS.find(c=>c.id===id) || EXPENSE_CATS[EXPENSE_CATS.length-1];
+    const cat = getCatList('expense').find(c=>c.id===id) || {name:'Lainnya',emoji:'💸'};
     return {id, name:cat.name, emoji:cat.emoji, value:val};
   }).sort((a,b) => b.value-a.value);
 }
@@ -569,7 +583,7 @@ function renderAnalitik() {
   // Category breakdown (donut + bar list, digabung)
   const catMap={};
   list.filter(t=>t.type==='expense').forEach(t=>{
-    const cat=EXPENSE_CATS.find(c=>c.id===t.catId)||{name:'Lainnya',emoji:'💸'};
+    const cat=getCatList("expense").find(c=>c.id===t.catId)||{name:"Lainnya",emoji:"💸"};
     if(!catMap[t.catId]) catMap[t.catId]={name:cat.name,emoji:cat.emoji,total:0};
     catMap[t.catId].total+=t.amount;
   });
@@ -1094,7 +1108,7 @@ function renderBudget() {
     bl.innerHTML=`<div class="empty-state"><div class="empty-icon">💰</div><p>Belum ada budget</p><span>Ketuk "+ Tambah" untuk mulai</span></div>`;
   } else {
     bl.innerHTML=budgets.map(b=>{
-      const cat=EXPENSE_CATS.find(c=>c.id===b.cat)||{name:b.cat,emoji:'💸'};
+      const cat=getCatList('expense').find(c=>c.id===b.cat)||{name:b.cat,emoji:'💸'};
       const used=monthTxs.filter(t=>t.catId===b.cat).reduce((s,t)=>s+t.amount,0);
       const remain=b.limit-used;
       const bpct=b.limit>0?Math.round((used/b.limit)*100):0;
@@ -1132,7 +1146,7 @@ function renderBudget() {
   const budgetedCats=budgets.map(b=>b.cat);
   const catMap={};
   monthTxs.filter(t=>!budgetedCats.includes(t.catId)).forEach(t=>{
-    const cat=EXPENSE_CATS.find(c=>c.id===t.catId)||{name:'Lainnya',emoji:'💸'};
+    const cat=getCatList("expense").find(c=>c.id===t.catId)||{name:"Lainnya",emoji:"💸"};
     if(!catMap[t.catId]) catMap[t.catId]={name:cat.name,emoji:cat.emoji,total:0};
     catMap[t.catId].total+=t.amount;
   });
@@ -1154,7 +1168,7 @@ function renderBudget() {
 
 // Budget sheet
 APP._editBudgetId = null;
-function openBudgetSheet(editId=null) {
+function openBudgetSheet(editId=null, preselectCat=null) {
   APP._editBudgetId = editId;
   const month = getBudgetMonth();
   const existing = editId ? APP.budgets.find(b=>b.id===editId) : null;
@@ -1162,18 +1176,111 @@ function openBudgetSheet(editId=null) {
 
   // Category pills — only expense cats not yet budgeted (or current cat if editing)
   const budgetedCats=APP.budgets.filter(b=>b.month===month&&b.id!==editId).map(b=>b.cat);
-  const avail=EXPENSE_CATS.filter(c=>!budgetedCats.includes(c.id));
-  const bcs=$('#budget-cat-scroll');
-  if(bcs){
-    bcs.innerHTML=avail.map(c=>`<div class="cat-pill expense-cat${existing?.cat===c.id?' selected':''}" data-cat="${c.id}">
-      <span class="cat-emoji">${c.emoji}</span><span class="cat-label">${c.name}</span></div>`).join('');
-    $$('#budget-cat-scroll .cat-pill').forEach(p=>p.addEventListener('click',()=>{
-      $$('#budget-cat-scroll .cat-pill').forEach(x=>x.classList.remove('selected'));
-      p.classList.add('selected');
-    }));
+  const avail=getCatList('expense').filter(c=>!budgetedCats.includes(c.id));
+  renderBudgetCatPicker(avail, preselectCat || existing?.cat);
+  const ba=$('#budget-amount');
+  if (ba) {
+    // If we're returning here after a detour to "+ Kategori Baru", restore
+    // whatever the user had already typed instead of wiping it.
+    if (APP._budgetAmountDraft !== undefined) {
+      ba.value = APP._budgetAmountDraft;
+      APP._budgetAmountDraft = undefined;
+    } else {
+      ba.value = existing ? existing.limit.toLocaleString('id') : '';
+    }
+    fmtAmtInput(ba);
   }
-  const ba=$('#budget-amount'); if(ba) { ba.value=existing?existing.limit.toLocaleString('id'):''; fmtAmtInput(ba); }
   openSheet('budget');
+}
+
+// Renders the category picker inside the Budget sheet: built-in + custom
+// categories, a "+ Kategori Baru" pill to create one on the spot, and a
+// small delete (×) affordance on custom-category pills only.
+function renderBudgetCatPicker(avail, selectedCatId) {
+  const bcs=$('#budget-cat-scroll'); if(!bcs) return;
+  const customIds = new Set(APP.customCats.map(c=>c.id));
+  bcs.innerHTML = avail.map(c => {
+    const isCustom = customIds.has(c.id);
+    return `<div class="cat-pill expense-cat${selectedCatId===c.id?' selected':''}" data-cat="${c.id}">
+      <span class="cat-emoji">${c.emoji}</span><span class="cat-label">${escapeHtml(c.name)}</span>
+      ${isCustom?`<span class="cat-del-x" data-catdel="${c.id}" title="Hapus kategori">✕</span>`:''}
+    </div>`;
+  }).join('') + `<div class="cat-pill add-cat-pill" id="budget-add-cat-btn"><span class="cat-emoji">➕</span><span class="cat-label">Kategori Baru</span></div>`;
+
+  $$('#budget-cat-scroll .cat-pill[data-cat]').forEach(p=>p.addEventListener('click',(e)=>{
+    if (e.target.closest('[data-catdel]')) return; // handled separately below
+    $$('#budget-cat-scroll .cat-pill').forEach(x=>x.classList.remove('selected'));
+    p.classList.add('selected');
+  }));
+  $$('#budget-cat-scroll [data-catdel]').forEach(x=>x.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await deleteCustomCategory(x.dataset.catdel);
+  }));
+  // Opening the "Kategori Baru" sheet closes the Budget sheet first (rather
+  // than stacking two bottom sheets on top of each other, which would
+  // overlap messily since both anchor to the bottom of the screen). The
+  // Budget sheet reopens automatically once the new-category flow finishes.
+  $('#budget-add-cat-btn')?.addEventListener('click', () => {
+    APP._budgetAmountDraft = $('#budget-amount')?.value || '';
+    closeSheet('budget');
+    openNewCategorySheet();
+  });
+}
+
+// Deletes a custom category. If any transaction still uses it, deletion is
+// blocked and the user is asked to move those transactions to a different
+// category first — nothing is auto-reassigned or silently altered.
+async function deleteCustomCategory(catId) {
+  const cat = APP.customCats.find(c=>c.id===catId);
+  if (!cat) return;
+  const inUseCount = APP.transactions.filter(t=>t.catId===catId).length;
+  if (inUseCount > 0) {
+    await askConfirm(
+      `Kategori "${cat.name}" masih dipakai di ${inUseCount} transaksi.\n\nUbah dulu kategori transaksi-transaksi tersebut sebelum menghapus kategori ini.`,
+      {title:'Kategori masih dipakai', icon:'⚠️'}
+    );
+    return;
+  }
+  const ok = await askConfirm(`Hapus kategori "${cat.name}"? Tindakan ini tidak dapat dibatalkan.`, {title:'Hapus Kategori?', icon:'🗑️'});
+  if (!ok) return;
+  APP.customCats = APP.customCats.filter(c=>c.id!==catId);
+  persist();
+  showToast('🗑️ Kategori dihapus');
+  const month = getBudgetMonth();
+  const budgetedCats=APP.budgets.filter(b=>b.month===month&&b.id!==APP._editBudgetId).map(b=>b.cat);
+  renderBudgetCatPicker(getCatList('expense').filter(c=>!budgetedCats.includes(c.id)));
+}
+
+// ===================== NEW CATEGORY SHEET =====================
+function openNewCategorySheet() {
+  $('#newcat-name').value = '';
+  const grid = $('#newcat-emoji-grid');
+  grid.innerHTML = CAT_EMOJIS.map((e,i) => `<div class="emoji-opt${i===0?' selected':''}" data-emoji="${e}">${e}</div>`).join('');
+  $$('#newcat-emoji-grid .emoji-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      $$('#newcat-emoji-grid .emoji-opt').forEach(x=>x.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+  openSheet('newcat');
+  setTimeout(()=>$('#newcat-name').focus(), 300);
+}
+function closeNewCategorySheet() {
+  closeSheet('newcat');
+  // Always return to the Budget sheet, preserving whatever add/edit
+  // context (APP._editBudgetId) was active before "+ Kategori Baru" was tapped.
+  openBudgetSheet(APP._editBudgetId);
+}
+function submitNewCategory() {
+  const name  = $('#newcat-name').value.trim();
+  const emoji = $('#newcat-emoji-grid .emoji-opt.selected')?.dataset.emoji || '💸';
+  if (!name) { showToast('⚠️ Nama kategori tidak boleh kosong','error'); return; }
+  const newCat = {id:'custom_'+genId(), name, emoji, type:'expense'};
+  APP.customCats.push(newCat);
+  persist();
+  closeSheet('newcat');
+  showToast(`✅ Kategori "${name}" ditambahkan`);
+  openBudgetSheet(APP._editBudgetId, newCat.id);
 }
 
 function saveBudget() {
@@ -1298,7 +1405,7 @@ function renderKalenderDetail() {
 
   // Transactions
   const txHTML=dayTxs.map(t=>{
-    const cats=t.type==='income'?INCOME_CATS:EXPENSE_CATS;
+    const cats=getCatList(t.type==='income'?'income':'expense');
     const cat=cats.find(c=>c.id===t.catId)||{emoji:'💸',name:t.catId};
     return `<div class="cal-tx-item">
       <div class="cal-tx-dot ${t.type}">${cat.emoji}</div>
@@ -1425,11 +1532,11 @@ function setTxType(type) {
 }
 
 function buildCatScroll(type) {
-  const cats = type==='income' ? INCOME_CATS : EXPENSE_CATS;
+  const cats = getCatList(type);
   $('#cat-scroll').innerHTML = cats.map(c =>
     `<div class="cat-pill${c.id===APP.selectedCatId?' selected'+(type==='expense'?' expense-cat':''):''}" data-cat="${c.id}">
       <div class="cat-emoji">${c.emoji}</div>
-      <div class="cat-label">${c.name}</div>
+      <div class="cat-label">${escapeHtml(c.name)}</div>
     </div>`).join('');
   $$('#cat-scroll .cat-pill').forEach(p => {
     p.addEventListener('click', () => {
@@ -2104,6 +2211,11 @@ async function init() {
   $('#budget-cancel')?.addEventListener('click', ()=>closeSheet('budget'));
   $('#budget-backdrop')?.addEventListener('click', ()=>closeSheet('budget'));
 
+  // NEW CATEGORY SHEET
+  $('#newcat-submit')?.addEventListener('click', submitNewCategory);
+  $('#newcat-cancel')?.addEventListener('click', closeNewCategorySheet);
+  $('#newcat-backdrop')?.addEventListener('click', closeNewCategorySheet);
+
   // REMINDER (kalender)
   $('#cal-add-reminder-btn')?.addEventListener('click', openReminderSheet);
   $('#reminder-submit')?.addEventListener('click', saveReminder);
@@ -2290,7 +2402,9 @@ async function init() {
   // KEYBOARD ESC
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      ['addtx','goal','saving','debt','wallet','transfer','pay'].forEach(closeSheet);
+      ['addtx','goal','saving','debt','wallet','transfer','pay','budget'].forEach(closeSheet);
+      if ($('#sheet-newcat')?.classList.contains('open')) closeNewCategorySheet();
+      if ($('#modal-generic-confirm').style.display==='flex') _resolveConfirm(false);
       $('#modal-delete').style.display='none';
       $('#modal-reset').style.display='none';
       $('#modal-photo').style.display='none';
