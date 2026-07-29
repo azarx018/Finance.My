@@ -1,12 +1,12 @@
 /* ================================================
-   AZAR FINANCE v5.2 — sw.js (Service Worker)
+   AZAR FINANCE v5.3 — sw.js (Service Worker)
    Offline Support · Cache First Strategy
    NOTE: CACHE_NAME must match the app version in script.js
    (APP_VERSION) and index.html (.app-info-ver). Bumping it on
    every release forces old cached assets to be replaced.
    ================================================ */
 
-const CACHE_NAME = 'azar-finance-v5.2';
+const CACHE_NAME = 'azar-finance-v5.3';
 const CACHE_URLS = [
   './',
   './index.html',

@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v5.2 — script.js
+   AZAR FINANCE v5.3 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '5.2';
+const APP_VERSION = '5.3';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -77,14 +77,16 @@ const $$ = s => document.querySelectorAll(s);
 
 function formatRp(n) {
   if (!n || isNaN(n)) return 'Rp 0';
-  return 'Rp ' + Math.abs(n).toLocaleString('id-ID');
+  const sign = n < 0 ? '-' : '';
+  return sign + 'Rp ' + Math.abs(n).toLocaleString('id-ID');
 }
 function formatRpC(n) {
+  const sign = (n||0) < 0 ? '-' : '';
   const a = Math.abs(n || 0);
-  if (a >= 1e9) return 'Rp ' + (a/1e9).toFixed(1) + ' M';
-  if (a >= 1e6) return 'Rp ' + (a/1e6).toFixed(1) + ' Jt';
-  if (a >= 1e3) return 'Rp ' + (a/1e3).toFixed(0) + ' Rb';
-  return 'Rp ' + a.toLocaleString('id-ID');
+  if (a >= 1e9) return sign + 'Rp ' + (a/1e9).toFixed(1) + ' M';
+  if (a >= 1e6) return sign + 'Rp ' + (a/1e6).toFixed(1) + ' Jt';
+  if (a >= 1e3) return sign + 'Rp ' + (a/1e3).toFixed(0) + ' Rb';
+  return sign + 'Rp ' + a.toLocaleString('id-ID');
 }
 function formatDate(s) {
   if (!s) return '';
@@ -568,6 +570,7 @@ function renderDashboard() {
 
   // Balance card
   $('#net-worth-display').textContent = formatRp(nw);
+  $('#net-worth-display').style.color = nw>=0 ? '' : 'var(--expense)';
   $('#dash-income').textContent  = formatRpC(income);
   $('#dash-expense').textContent = formatRpC(expense);
   const wc = $('#dash-wallet-count');
