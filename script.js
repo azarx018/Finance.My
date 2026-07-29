@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v4.7 — script.js
+   AZAR FINANCE v5.2 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '4.7';
+const APP_VERSION = '5.2';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -188,6 +188,26 @@ async function _saveSettingsAsync() {
 }
 function saveSettings() { return _saveSettingsAsync(); }
 
+// One-time migration (v5.1): before this version, a savings deposit/withdraw
+// was stored as a plain type:'income'/'expense' transaction, identifiable
+// only via catId==='saving_transfer'. That's exactly what let it slip
+// through any code that filtered by type — the root cause of the "fake
+// income" bug. From v5.1 it gets its own type:'saving_transfer' with an
+// explicit `direction`, so it's excluded from income/expense everywhere
+// automatically. This upgrades any transactions saved by an older version
+// so old history doesn't quietly regress back into the old bug.
+function migrateLegacySavingTransfers() {
+  let migrated = 0;
+  APP.transactions.forEach(t => {
+    if (t.catId === 'saving_transfer' && t.type !== 'saving_transfer') {
+      t.direction = t.type === 'expense' ? 'deposit' : 'withdraw';
+      t.type = 'saving_transfer';
+      migrated++;
+    }
+  });
+  return migrated;
+}
+
 async function loadAll() {
   try {
     const [tx, goals, debts, wallets, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs, customCats] = await Promise.all([
@@ -225,6 +245,7 @@ async function loadAll() {
     APP.wallets = [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
     await persist();
   }
+  if (migrateLegacySavingTransfers() > 0) await persist();
   APP.selectedWalletId = APP.wallets[0]?.id || 'default';
 }
 
@@ -276,7 +297,7 @@ function getWalletBalance(walletId) {
   const w = APP.wallets.find(x => x.id === walletId);
   const init = w?.initialBalance || 0;
   const txBal = APP.transactions
-    .filter(t => t.walletId === walletId && t.type !== 'transfer')
+    .filter(t => t.walletId === walletId && t.type !== 'transfer' && t.type !== 'saving_transfer')
     .reduce((s,t) => t.type === 'income' ? s + t.amount : s - t.amount, 0);
   const trBal = APP.transactions
     .filter(t => t.type === 'transfer')
@@ -285,7 +306,12 @@ function getWalletBalance(walletId) {
       if (t.walletId   === walletId) return s - t.amount;
       return s;
     }, 0);
-  return init + txBal + trBal;
+  // Savings deposit/withdraw moves money between this wallet and a bucket:
+  // deposit takes money OUT of the wallet, withdraw brings it back IN.
+  const stBal = APP.transactions
+    .filter(t => t.type === 'saving_transfer' && t.walletId === walletId)
+    .reduce((s,t) => t.direction === 'withdraw' ? s + t.amount : s - t.amount, 0);
+  return init + txBal + trBal + stBal;
 }
 // Computes balance + income/expense/count for EVERY wallet in a single
 // pass over APP.transactions, instead of re-filtering the full array
@@ -300,6 +326,12 @@ function computeWalletStats() {
     if (t.type === 'transfer') {
       if (stats[t.toWalletId]) stats[t.toWalletId].balance += t.amount;
       if (stats[t.walletId])   stats[t.walletId].balance   -= t.amount;
+      return;
+    }
+    if (t.type === 'saving_transfer') {
+      // Moves the wallet's balance but is never real income/expense.
+      const s = stats[t.walletId]; if (!s) return;
+      if (t.direction === 'withdraw') s.balance += t.amount; else s.balance -= t.amount;
       return;
     }
     const s = stats[t.walletId]; if (!s) return;
@@ -339,6 +371,10 @@ function filterTx(dateF, typeF, search) {
   return list;
 }
 
+// Money moved into/out of a savings bucket has its own type:'saving_transfer'
+// (see saveSavingTx) instead of masquerading as 'income'/'expense' — so
+// every filter below that checks t.type==='income'/'expense' naturally
+// excludes it already, with nothing extra to remember at each call site.
 function calcTotals(list) {
   let income=0, expense=0;
   list.forEach(t => { if(t.type==='income') income+=t.amount; else if(t.type==='expense') expense+=t.amount; });
@@ -356,7 +392,7 @@ function getMonthlyData(months=6) {
   for (let i = months-1; i >= 0; i--) {
     const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-i);
     const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const txs = APP.transactions.filter(t => t.date.startsWith(mk) && t.type!=='transfer');
+    const txs = APP.transactions.filter(t => t.date.startsWith(mk) && t.type!=='transfer' && t.type!=='saving_transfer');
     result.push({
       month: mk,
       label: d.toLocaleDateString('id-ID',{month:'short'}),
@@ -477,15 +513,22 @@ const EX_ARR = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="ev
 
 function txItemHTML(tx, delay=0) {
   const isIn = tx.type==='income', isT = tx.type==='transfer';
+  const isST = tx.type==='saving_transfer';
+  // A saving_transfer's `direction` decides whether it LOOKS like an income
+  // (withdraw — money enters the wallet) or an expense (deposit — money
+  // leaves the wallet) for display, even though its `type` is neither —
+  // that's exactly what keeps it out of real income/expense totals.
+  const stIn = isST && tx.direction === 'withdraw';
   const cat  = !isT ? getCat(tx.type, tx.catId) : null;
-  const dotContent = isT ? '🔄' : (cat?.emoji || (isIn?IN_ARR:EX_ARR));
+  const displayClass = isST ? (stIn ? 'income' : 'expense') : tx.type;
+  const dotContent = isT ? '🔄' : (cat?.emoji || ((isIn||stIn) ? IN_ARR : EX_ARR));
   const wallet = APP.wallets.find(w=>w.id===tx.walletId);
-  const sign   = isIn ? '+' : isT ? '→' : '−';
+  const sign   = isT ? '→' : (isIn||stIn) ? '+' : '−';
   const catMeta    = cat  ? `<span class="tx-cat-badge">${escapeHtml(cat.name)}</span>` : '';
   const walletMeta = wallet ? ` · ${wallet.emoji}${escapeHtml(wallet.name)}` : '';
   const noteMeta   = tx.note && tx.note!=='[Otomatis dari berulang]' ? ` · ${escapeHtml(tx.note.slice(0,20))}${tx.note.length>20?'…':''}` : '';
   const photoHTML  = tx.photo ? `<img src="${tx.photo}" class="tx-thumb" data-photo="${tx.photo}" alt="struk"/>` : '';
-  return `<div class="tx-item ${tx.type}" style="animation-delay:${delay}ms" data-id="${tx.id}">
+  return `<div class="tx-item ${displayClass}" style="animation-delay:${delay}ms" data-id="${tx.id}">
     <div class="tx-dot">${dotContent}</div>
     <div class="tx-info">
       <div class="tx-desc">${escapeHtml(tx.desc)||'Tanpa deskripsi'}</div>
@@ -514,11 +557,10 @@ function renderDashboard() {
   const walletStats = computeWalletStats();
   const nw   = APP.wallets.reduce((s,w) => s + (walletStats[w.id]?.balance||0), 0);
   // "Savings" here means income not spent on real (external) expenses. Money
-  // moved into a Tabungan bucket (catId 'saving_transfer') is recorded as an
-  // expense/income pair so wallet balances stay accurate, but it's still the
-  // user's own money — just relocated, not spent. Excluding it here means
-  // depositing into a savings bucket correctly INCREASES the savings rate
-  // instead of looking like spending.
+  // moved into a Tabungan bucket has type:'saving_transfer' so wallet
+  // balances stay accurate, but it's still the user's own money — just
+  // relocated, not spent. This filter is now belt-and-suspenders (calcTotals
+  // already excludes type:'saving_transfer'), kept for clarity/safety.
   const listForSavings = list.filter(t => t.catId !== 'saving_transfer');
   const {income: incSav, expense: expSav} = calcTotals(listForSavings);
   const savings = incSav - expSav;
@@ -922,43 +964,22 @@ function renderTabungan() {
     list.innerHTML = emptyState('🪣','Belum ada kantong tabungan','Ketuk "+ Buat" untuk mulai');
     return;
   }
-  list.innerHTML = APP.savingBuckets.map(b => {
-    const bal = getBucketBalance(b.id);
-    const pct = b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null;
-    const recentTxs = APP.savingTxs.filter(t=>t.bucketId===b.id).slice(-3).reverse();
-    // Collect unique wallets used for deposits in this bucket
-    const usedWalletIds = [...new Set(APP.savingTxs.filter(t=>t.bucketId===b.id && t.type==='deposit').map(t=>t.walletId))];
-    const walletTags = usedWalletIds.map(wid => {
-      const w = APP.wallets.find(x=>x.id===wid);
-      return w ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--card2,#f1f5f9);border-radius:20px;padding:2px 8px;font-size:0.62rem;color:var(--txt-muted);margin-right:4px;margin-top:4px;">${w.emoji} ${escapeHtml(w.name)}</span>` : '';
-    }).join('');
-    return `<div class="wallet-card" style="margin-bottom:12px;">
-      <div class="wcard-top">
-        <div class="wcard-emoji">${b.emoji||'🪣'}</div>
-        <div style="flex:1;min-width:0;">
-          <div class="wcard-name">${escapeHtml(b.name)}</div>
-          ${walletTags ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;">${walletTags}</div>` : ''}
-          <div class="wcard-count" style="margin-top:4px;">${recentTxs.length} transaksi terakhir</div>
-        </div>
-        <div style="text-align:right;">
-          <div class="wcard-bal" style="color:var(--info)">${formatRp(bal)}</div>
-          ${pct!==null?`<div style="font-size:0.65rem;color:var(--txt-muted);margin-top:2px;">${pct}% dari target</div>`:''}
-        </div>
-      </div>
-      ${b.target>0?`<div style="margin-bottom:12px;">
-        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--txt-muted);margin-bottom:4px;">
-          <span>${formatRpC(bal)} tersimpan</span><span>Target ${formatRpC(b.target)}</span>
-        </div>
-        <div class="bi-bar"><div class="bi-bar-fill ${pct>=100?'safe':pct>=60?'warn':'safe'}" style="width:${pct}%;background:linear-gradient(90deg,#1d4ed8,#3b82f6)"></div></div>
-      </div>`:''}
-      <div class="wcard-actions">
-        <button class="wcard-btn transfer" data-bid="${b.id}" data-action="deposit">⬆️ Tabung</button>
-        <button class="wcard-btn transfer" data-bid="${b.id}" data-action="withdraw" style="background:var(--expense-bg);color:var(--expense);border-color:rgba(239,68,68,0.25);">⬇️ Tarik</button>
-        <button class="wcard-btn edit" data-bid="${b.id}" data-action="edit">✏️</button>
-        <button class="wcard-btn del" data-bid="${b.id}" data-action="del">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
+  // Buckets created before the "Selesai" status existed have no `status`
+  // field — treat those as active.
+  const isCompleted = b => b.status === 'completed';
+  const activeBuckets    = APP.savingBuckets.filter(b => !isCompleted(b));
+  const completedBuckets = APP.savingBuckets.filter(b => isCompleted(b));
+
+  const activeHTML = activeBuckets.length
+    ? activeBuckets.map(b => bucketCardHTML(b)).join('')
+    : emptyState('🪣','Belum ada kantong aktif','Ketuk "+ Buat" untuk mulai');
+
+  const completedHTML = completedBuckets.length
+    ? `<div class="saving-section-label" style="margin:20px 0 10px;font-size:0.72rem;font-weight:600;color:var(--txt-muted);text-transform:uppercase;letter-spacing:0.03em;">🏁 Selesai (${completedBuckets.length})</div>`
+      + completedBuckets.map(b => bucketCardHTML(b)).join('')
+    : '';
+
+  list.innerHTML = activeHTML + completedHTML;
 
   // Listeners
   $$('#saving-bucket-list [data-action]').forEach(btn => {
@@ -967,6 +988,18 @@ function renderTabungan() {
       if (action==='deposit') openSavingTxSheet('deposit', bid);
       else if (action==='withdraw') openSavingTxSheet('withdraw', bid);
       else if (action==='edit') openBucketSheet(bid);
+      else if (action==='complete') {
+        const b = APP.savingBuckets.find(x=>x.id===bid);
+        if(b){ b.status='completed'; b.completedAt=todayStr(); }
+        persist(); renderTabungan();
+        showToast('🏁 Kantong ditandai selesai','success');
+      }
+      else if (action==='reactivate') {
+        const b = APP.savingBuckets.find(x=>x.id===bid);
+        if(b){ b.status='active'; delete b.completedAt; }
+        persist(); renderTabungan();
+        showToast('🔓 Kantong dibuka lagi, bisa nabung lagi','success');
+      }
       else if (action==='del') {
         const hasTxs = APP.savingTxs.some(t=>t.bucketId===bid);
         if(hasTxs) {
@@ -990,6 +1023,55 @@ function renderTabungan() {
       }
     });
   });
+}
+
+// Renders a single saving-bucket card. Active buckets get full actions
+// (tabung/tarik/edit/selesai/hapus); completed buckets can still be
+// withdrawn from (e.g. to cash the goal out) but can no longer receive new
+// deposits, and get a "buka lagi" action instead of "tandai selesai".
+function bucketCardHTML(b) {
+  const done = b.status === 'completed';
+  const bal = getBucketBalance(b.id);
+  const pct = b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null;
+  const recentTxs = APP.savingTxs.filter(t=>t.bucketId===b.id).slice(-3).reverse();
+  // Collect unique wallets used for deposits in this bucket
+  const usedWalletIds = [...new Set(APP.savingTxs.filter(t=>t.bucketId===b.id && t.type==='deposit').map(t=>t.walletId))];
+  const walletTags = usedWalletIds.map(wid => {
+    const w = APP.wallets.find(x=>x.id===wid);
+    return w ? `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--card2,#f1f5f9);border-radius:20px;padding:2px 8px;font-size:0.62rem;color:var(--txt-muted);margin-right:4px;margin-top:4px;">${w.emoji} ${escapeHtml(w.name)}</span>` : '';
+  }).join('');
+  const actionButtons = done
+    ? `<button class="wcard-btn transfer" data-bid="${b.id}" data-action="withdraw" style="background:var(--expense-bg);color:var(--expense);border-color:rgba(239,68,68,0.25);">⬇️ Tarik</button>
+       <button class="wcard-btn edit" data-bid="${b.id}" data-action="reactivate">🔓 Buka Lagi</button>
+       <button class="wcard-btn del" data-bid="${b.id}" data-action="del">🗑️</button>`
+    : `<button class="wcard-btn transfer" data-bid="${b.id}" data-action="deposit">⬆️ Tabung</button>
+       <button class="wcard-btn transfer" data-bid="${b.id}" data-action="withdraw" style="background:var(--expense-bg);color:var(--expense);border-color:rgba(239,68,68,0.25);">⬇️ Tarik</button>
+       <button class="wcard-btn edit" data-bid="${b.id}" data-action="edit">✏️</button>
+       <button class="wcard-btn edit" data-bid="${b.id}" data-action="complete" title="Tandai kantong ini selesai">🏁</button>
+       <button class="wcard-btn del" data-bid="${b.id}" data-action="del">🗑️</button>`;
+  return `<div class="wallet-card" style="margin-bottom:12px;${done?'opacity:0.75;':''}">
+      <div class="wcard-top">
+        <div class="wcard-emoji">${b.emoji||'🪣'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="wcard-name">${escapeHtml(b.name)} ${done?'<span style="font-size:0.62rem;font-weight:600;color:var(--income);background:rgba(34,197,94,0.12);border-radius:10px;padding:2px 8px;margin-left:4px;">✅ Selesai</span>':''}</div>
+          ${walletTags ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;">${walletTags}</div>` : ''}
+          <div class="wcard-count" style="margin-top:4px;">${recentTxs.length} transaksi terakhir</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="wcard-bal" style="color:var(--info)">${formatRp(bal)}</div>
+          ${pct!==null?`<div style="font-size:0.65rem;color:var(--txt-muted);margin-top:2px;">${pct}% dari target</div>`:''}
+        </div>
+      </div>
+      ${b.target>0?`<div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--txt-muted);margin-bottom:4px;">
+          <span>${formatRpC(bal)} tersimpan</span><span>Target ${formatRpC(b.target)}</span>
+        </div>
+        <div class="bi-bar"><div class="bi-bar-fill ${pct>=100?'safe':pct>=60?'warn':'safe'}" style="width:${pct}%;background:linear-gradient(90deg,#1d4ed8,#3b82f6)"></div></div>
+      </div>`:''}
+      <div class="wcard-actions">
+        ${actionButtons}
+      </div>
+    </div>`;
 }
 
 // Bucket sheet
@@ -1023,7 +1105,7 @@ function saveBucket() {
     const b = APP.savingBuckets.find(x=>x.id===APP._editBucketId);
     if(b){ b.name=name; b.emoji=emoji; b.target=target; }
   } else {
-    APP.savingBuckets.push({id:genId(),name,emoji,target,createdAt:todayStr()});
+    APP.savingBuckets.push({id:genId(),name,emoji,target,createdAt:todayStr(),status:'active'});
   }
   persist(); closeSheet('bucket'); renderTabungan();
   showToast(APP._editBucketId?'Kantong diupdate ✅':'Kantong dibuat ✅','success');
@@ -1048,10 +1130,20 @@ function openSavingTxSheet(mode='deposit', bucketId=null) {
   // Date
   const dt = $('#saving-tx-date'); if(dt) dt.value=todayStr();
   const note = $('#saving-tx-note'); if(note) note.value='';
+  // Completed buckets can't receive new deposits — hide them from the
+  // picker when depositing, so there's no way to sneak a "Tabung" into a
+  // bucket that's already marked finished.
+  const pickableBuckets = mode==='deposit'
+    ? APP.savingBuckets.filter(b => b.status!=='completed')
+    : APP.savingBuckets;
+  if (mode==='deposit' && bucketId) {
+    const stillValid = pickableBuckets.some(b=>b.id===bucketId);
+    if (!stillValid) { bucketId = null; APP._savingTxBucketId = null; }
+  }
   // Bucket selector
   const bs = $('#saving-bucket-select');
   if(bs) {
-    bs.innerHTML = APP.savingBuckets.map(b=>`
+    bs.innerHTML = pickableBuckets.map(b=>`
       <div class="wallet-pill${b.id===bucketId?' selected':''}" data-bucket="${b.id}">
         <span class="wallet-pill-emoji">${b.emoji||'🪣'}</span>
         <span class="wallet-pill-name">${escapeHtml(b.name)}</span>
@@ -1078,6 +1170,11 @@ function saveSavingTx() {
   const note = $('#saving-tx-note')?.value?.trim()||'';
   const mode = APP._savingTxMode;
 
+  const bucket = APP.savingBuckets.find(b=>b.id===bucketId);
+  if (mode==='deposit' && bucket?.status==='completed') {
+    return showToast('Kantong ini sudah selesai — buka lagi dulu untuk menabung','error');
+  }
+
   // Check wallet balance for deposit
   if(mode==='deposit') {
     const walBal = getWalletBalance(walletId);
@@ -1088,14 +1185,21 @@ function saveSavingTx() {
   }
 
   // Add saving transaction
-  APP.savingTxs.push({id:genId(), bucketId, walletId, type:mode, amount, date, note});
+  const savingTxId = genId();
+  APP.savingTxs.push({id:savingTxId, bucketId, walletId, type:mode, amount, date, note});
 
-  // Adjust wallet balance via a regular transaction (store bucketId for future cleanup)
-  const bucket = APP.savingBuckets.find(b=>b.id===bucketId);
+  // Adjust wallet balance via a dedicated transaction type — 'saving_transfer'
+  // with an explicit direction, mirroring how wallet-to-wallet 'transfer' is
+  // its own type. This is what makes every income/expense filter in the app
+  // exclude it automatically, with nothing to remember at each call site.
+  // savingTxRef links back to the savingTxs record above so that deleting
+  // this transaction from Riwayat can also remove its paired bucket entry
+  // instead of leaving the two out of sync.
   const desc = mode==='deposit'?`Tabung → ${bucket?.name||'Tabungan'}`:`Tarik ← ${bucket?.name||'Tabungan'}`;
   APP.transactions.push({
-    id:genId(), type: mode==='deposit'?'expense':'income',
-    amount, catId:'saving_transfer', desc, date, walletId, note, photo:null, bucketId
+    id:genId(), type:'saving_transfer', direction: mode,
+    amount, catId:'saving_transfer', desc, date, walletId, note, photo:null, bucketId,
+    savingTxRef: savingTxId
   });
 
   persist(); closeSheet('saving-tx'); renderTabungan(); renderDashboard();
@@ -1451,15 +1555,19 @@ function renderKalenderDetail() {
 
   // Transactions
   const txHTML=dayTxs.map(t=>{
-    const cats=getCatList(t.type==='income'?'income':'expense');
+    // Same display mapping as txItemHTML: a saving_transfer withdraw looks
+    // like income, a deposit looks like expense — driven by `direction`,
+    // not `type`, so it stays excluded from real income/expense stats.
+    const dispType = t.type==='saving_transfer' ? (t.direction==='withdraw'?'income':'expense') : t.type;
+    const cats=getCatList(dispType==='income'?'income':'expense');
     const cat=cats.find(c=>c.id===t.catId)||{emoji:'💸',name:t.catId};
     return `<div class="cal-tx-item">
-      <div class="cal-tx-dot ${t.type}">${cat.emoji}</div>
+      <div class="cal-tx-dot ${dispType}">${cat.emoji}</div>
       <div class="cal-tx-info">
         <div class="cal-tx-desc">${escapeHtml(t.desc)||'Transaksi'}</div>
         <div class="cal-tx-cat">${cat.name}</div>
       </div>
-      <div class="cal-tx-amt ${t.type}">${t.type==='income'?'+':'-'}${formatRpC(t.amount)}</div>
+      <div class="cal-tx-amt ${dispType}">${dispType==='income'?'+':'-'}${formatRpC(t.amount)}</div>
     </div>`;
   }).join('');
 
@@ -2000,7 +2108,23 @@ function openDeleteModal(type, id, msg='Tindakan ini tidak dapat dibatalkan.') {
 function confirmDelete() {
   if (!APP.deleteTarget) return;
   const {type, id} = APP.deleteTarget;
-  if      (type==='tx')     { APP.transactions=APP.transactions.filter(t=>t.id!==id); refreshCurrentPage(); showToast('🗑️ Transaksi dihapus','info'); }
+  if (type==='tx') {
+    const t = APP.transactions.find(x=>x.id===id);
+    if (t?.type === 'saving_transfer') {
+      if (t.savingTxRef) {
+        APP.savingTxs = APP.savingTxs.filter(st => st.id !== t.savingTxRef);
+      } else {
+        // Legacy transaction from before this link existed — fall back to
+        // matching one savingTxs record by bucket/wallet/amount/date/direction.
+        // Removes at most one match so it can't over-delete if two identical
+        // tabung/tarik happen to share the same day.
+        const stType = t.direction === 'withdraw' ? 'withdraw' : 'deposit';
+        const idx = APP.savingTxs.findIndex(st => st.bucketId===t.bucketId && st.walletId===t.walletId && st.amount===t.amount && st.date===t.date && st.type===stType);
+        if (idx !== -1) APP.savingTxs.splice(idx,1);
+      }
+    }
+    APP.transactions=APP.transactions.filter(t=>t.id!==id); refreshCurrentPage(); showToast('🗑️ Transaksi dihapus','info');
+  }
   else if (type==='goal')   { APP.goals=APP.goals.filter(g=>g.id!==id); renderImpian(); renderLainnya(); showToast('🗑️ Impian dihapus','info'); }
   else if (type==='debt')   { APP.debts=APP.debts.filter(d=>d.id!==id); renderHutang(); renderLainnya(); showToast('🗑️ Hutang dihapus','info'); }
   else if (type==='wallet') {
@@ -2088,6 +2212,7 @@ function importJSON(file) {
         APP.debts        = data.debts        || [];
         APP.wallets      = data.wallets?.length ? data.wallets : [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
       }
+      migrateLegacySavingTransfers();
       await persist();
       APP.selectedWalletId = APP.wallets[0]?.id || 'default';
       renderDashboard(); renderRiwayat();
@@ -2420,8 +2545,23 @@ async function init() {
     // TX edit / delete
     const txEdit = e.target.closest('.tx-btn.edit');
     const txDel  = e.target.closest('.tx-btn.del');
-    if (txEdit) { openTxSheet(txEdit.dataset.id); return; }
-    if (txDel)  { openDeleteModal('tx', txDel.dataset.id, 'Transaksi ini akan dihapus permanen.'); return; }
+    if (txEdit) {
+      const t = APP.transactions.find(x=>x.id===txEdit.dataset.id);
+      if (t?.type === 'saving_transfer') {
+        showToast('Kelola tabung/tarik dari halaman Tabungan ya','info');
+        navigateTo('impian');
+        return;
+      }
+      openTxSheet(txEdit.dataset.id); return;
+    }
+    if (txDel)  {
+      const t = APP.transactions.find(x=>x.id===txDel.dataset.id);
+      const msg = t?.type==='saving_transfer'
+        ? 'Transaksi ini akan dihapus permanen, dan saldo kantong tabungan terkait akan ikut disesuaikan.'
+        : 'Transaksi ini akan dihapus permanen.';
+      openDeleteModal('tx', txDel.dataset.id, msg);
+      return;
+    }
 
     // Goal actions
     const gSave = e.target.closest('[data-goal-save]');
