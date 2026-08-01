@@ -1,5 +1,5 @@
 /* ================================================
-   AZAR FINANCE v5.3 — script.js
+   AZAR FINANCE v5.5 — script.js
    Multi-Wallet · Analitik · Notes · Photos
    ================================================ */
 'use strict';
@@ -8,7 +8,7 @@
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release: bump this + sw.js CACHE_NAME + index.html footer text.
-const APP_VERSION = '5.3';
+const APP_VERSION = '5.5';
 
 // ===================== SECURITY: HTML ESCAPING =====================
 // User-supplied text (description, notes, wallet/debt/goal names, etc.)
@@ -35,7 +35,7 @@ const EXPENSE_CATS = [
   {id:'shopping',name:'Belanja',emoji:'🛍️'},{id:'entertainment',name:'Hiburan',emoji:'🎮'},
   {id:'health',name:'Kesehatan',emoji:'💊'},{id:'education',name:'Pendidikan',emoji:'📚'},
   {id:'bills',name:'Tagihan',emoji:'💡'},{id:'home',name:'Rumah',emoji:'🏠'},
-  {id:'savings',name:'Tabungan',emoji:'🐷'},{id:'saving_transfer',name:'Transfer Tabungan',emoji:'🏦'},{id:'other_exp',name:'Lainnya',emoji:'💸'},
+  {id:'savings',name:'Tabungan',emoji:'🐷'},{id:'saving_transfer',name:'Transfer Tabungan',emoji:'🏦'},{id:'debt_transfer',name:'Hutang/Piutang',emoji:'💳'},{id:'other_exp',name:'Lainnya',emoji:'💸'},
 ];
 const WALLET_EMOJIS = ['👛','💼','🏦','💳','📱','💵','🪙','🏧','💎','🏠'];
 const CAT_EMOJIS = ['☕','🍕','🍔','🍜','🍿','🍰','🚗','⛽','🎬','🎵','🐾','👶','🎁','💇','👕','📱','💻','✈️','🏋️','⚽','🎨','📖','🧾','🔧','💊','🐕','🌱','🧴','🎯','💸'];
@@ -61,6 +61,7 @@ const APP = {
   selectedType:'income', selectedCatId:'other_inc', selectedWalletId:'default',
   dashFilter:'month', histFilter:'all', histSearch:'', debtFilter:'all', analitikPeriod:'month',
   deleteTarget:null,
+  savingBucketTab:'active', // 'active' | 'completed' — Tabungan page tab
   darkMode:false, notifEnabled:false, notifTime:'20:00', notifTimerId:null,
   txPhoto:null,
 };
@@ -190,6 +191,25 @@ async function _saveSettingsAsync() {
 }
 function saveSettings() { return _saveSettingsAsync(); }
 
+// v5.4 migration: before this version, borrowing/lending/repaying a debt
+// was recorded as a plain type:'income'/'expense' transaction — identifiable
+// only via the debtRef link back to APP.debts, the same masquerading
+// pattern (and the same "not real income/expense" bug) that saving_transfer
+// had. Any transaction carrying a debtRef is unambiguously debt-related, so
+// that's used here (instead of catId) to upgrade it to type:'debt_transfer'.
+function migrateLegacyDebtTransfers() {
+  let migrated = 0;
+  APP.transactions.forEach(t => {
+    if (t.debtRef && t.type !== 'debt_transfer') {
+      t.direction = t.type === 'income' ? 'in' : 'out';
+      t.type = 'debt_transfer';
+      t.catId = 'debt_transfer';
+      migrated++;
+    }
+  });
+  return migrated;
+}
+
 // One-time migration (v5.1): before this version, a savings deposit/withdraw
 // was stored as a plain type:'income'/'expense' transaction, identifiable
 // only via catId==='saving_transfer'. That's exactly what let it slip
@@ -208,6 +228,32 @@ function migrateLegacySavingTransfers() {
     }
   });
   return migrated;
+}
+
+// v5.4 migration: an old "Impian" (goal) feature pre-dates the current
+// savingBuckets/Tabungan system and was fully superseded by it, but a FAB
+// routing bug (fixed in v5.4 — the FAB used to open the old goal sheet
+// instead of the bucket sheet on this page) could still create entries in
+// APP.goals that were never shown anywhere in the UI. This converts any
+// leftover goals into savings buckets so nothing is silently lost.
+// The old `saved` progress number is NOT carried over as a real balance —
+// it was never linked to an actual wallet transaction in the old system,
+// so fabricating one now would inflate net worth with money that never
+// really moved. Instead it's reported back to the caller so the app can
+// tell the user, rather than discarding it without a word.
+function migrateLegacyGoalsToBuckets() {
+  if (!APP.goals.length) return null;
+  let totalSaved = 0;
+  APP.goals.forEach(g => {
+    APP.savingBuckets.push({
+      id: genId(), name: g.name || 'Impian', emoji: '⭐',
+      target: g.target || 0, createdAt: g.createdAt || todayStr(), status: 'active',
+    });
+    totalSaved += (g.saved || 0);
+  });
+  const count = APP.goals.length;
+  APP.goals = [];
+  return { count, totalSaved };
 }
 
 async function loadAll() {
@@ -248,6 +294,9 @@ async function loadAll() {
     await persist();
   }
   if (migrateLegacySavingTransfers() > 0) await persist();
+  if (migrateLegacyDebtTransfers() > 0) await persist();
+  const goalMigration = migrateLegacyGoalsToBuckets();
+  if (goalMigration) { await persist(); APP._goalMigrationResult = goalMigration; }
   APP.selectedWalletId = APP.wallets[0]?.id || 'default';
 }
 
@@ -299,7 +348,7 @@ function getWalletBalance(walletId) {
   const w = APP.wallets.find(x => x.id === walletId);
   const init = w?.initialBalance || 0;
   const txBal = APP.transactions
-    .filter(t => t.walletId === walletId && t.type !== 'transfer' && t.type !== 'saving_transfer')
+    .filter(t => t.walletId === walletId && t.type !== 'transfer' && t.type !== 'saving_transfer' && t.type !== 'debt_transfer')
     .reduce((s,t) => t.type === 'income' ? s + t.amount : s - t.amount, 0);
   const trBal = APP.transactions
     .filter(t => t.type === 'transfer')
@@ -313,7 +362,12 @@ function getWalletBalance(walletId) {
   const stBal = APP.transactions
     .filter(t => t.type === 'saving_transfer' && t.walletId === walletId)
     .reduce((s,t) => t.direction === 'withdraw' ? s + t.amount : s - t.amount, 0);
-  return init + txBal + trBal + stBal;
+  // Borrowing/lending/repaying/collecting moves cash in/out of this wallet
+  // but is never counted as real income/expense.
+  const dtBal = APP.transactions
+    .filter(t => t.type === 'debt_transfer' && t.walletId === walletId)
+    .reduce((s,t) => t.direction === 'in' ? s + t.amount : s - t.amount, 0);
+  return init + txBal + trBal + stBal + dtBal;
 }
 // Computes balance + income/expense/count for EVERY wallet in a single
 // pass over APP.transactions, instead of re-filtering the full array
@@ -334,6 +388,12 @@ function computeWalletStats() {
       // Moves the wallet's balance but is never real income/expense.
       const s = stats[t.walletId]; if (!s) return;
       if (t.direction === 'withdraw') s.balance += t.amount; else s.balance -= t.amount;
+      return;
+    }
+    if (t.type === 'debt_transfer') {
+      // Same idea — moves cash, never counts as real income/expense.
+      const s = stats[t.walletId]; if (!s) return;
+      if (t.direction === 'in') s.balance += t.amount; else s.balance -= t.amount;
       return;
     }
     const s = stats[t.walletId]; if (!s) return;
@@ -516,13 +576,13 @@ const EX_ARR = `<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="ev
 function txItemHTML(tx, delay=0) {
   const isIn = tx.type==='income', isT = tx.type==='transfer';
   const isST = tx.type==='saving_transfer';
-  // A saving_transfer's `direction` decides whether it LOOKS like an income
-  // (withdraw — money enters the wallet) or an expense (deposit — money
-  // leaves the wallet) for display, even though its `type` is neither —
-  // that's exactly what keeps it out of real income/expense totals.
-  const stIn = isST && tx.direction === 'withdraw';
+  const isDT = tx.type==='debt_transfer';
+  // A saving_transfer/debt_transfer's `direction` decides whether it LOOKS
+  // like an income or an expense for display, even though its `type` is
+  // neither — that's exactly what keeps it out of real income/expense totals.
+  const stIn = (isST && tx.direction === 'withdraw') || (isDT && tx.direction === 'in');
   const cat  = !isT ? getCat(tx.type, tx.catId) : null;
-  const displayClass = isST ? (stIn ? 'income' : 'expense') : tx.type;
+  const displayClass = (isST||isDT) ? (stIn ? 'income' : 'expense') : tx.type;
   const dotContent = isT ? '🔄' : (cat?.emoji || ((isIn||stIn) ? IN_ARR : EX_ARR));
   const wallet = APP.wallets.find(w=>w.id===tx.walletId);
   const sign   = isT ? '→' : (isIn||stIn) ? '+' : '−';
@@ -973,33 +1033,62 @@ function renderTabungan() {
   const activeBuckets    = APP.savingBuckets.filter(b => !isCompleted(b));
   const completedBuckets = APP.savingBuckets.filter(b => isCompleted(b));
 
-  const activeHTML = activeBuckets.length
-    ? activeBuckets.map(b => bucketCardHTML(b)).join('')
-    : emptyState('🪣','Belum ada kantong aktif','Ketuk "+ Buat" untuk mulai');
+  // Tab switcher — active and completed buckets are shown one group at a
+  // time (not stacked together), so a finished bucket that's been fully
+  // withdrawn (still cosmetically shown at 100%, see bucketCardHTML) can't
+  // sit next to real in-progress balances and cause confusion.
+  const tab = APP.savingBucketTab === 'completed' ? 'completed' : 'active';
+  const tabsHTML = `<div class="saving-tab-switch" style="display:flex;gap:8px;margin-bottom:14px;">
+    <button class="saving-tab-btn${tab==='active'?' active':''}" data-tab="active" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border,rgba(0,0,0,0.08));background:${tab==='active'?'var(--accent,#3b82f6)':'transparent'};color:${tab==='active'?'#fff':'var(--txt-muted)'};font-size:0.78rem;font-weight:600;">🔄 Aktif/Proses (${activeBuckets.length})</button>
+    <button class="saving-tab-btn${tab==='completed'?' active':''}" data-tab="completed" style="flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--border,rgba(0,0,0,0.08));background:${tab==='completed'?'var(--accent,#3b82f6)':'transparent'};color:${tab==='completed'?'#fff':'var(--txt-muted)'};font-size:0.78rem;font-weight:600;">🏁 Tercapai (${completedBuckets.length})</button>
+  </div>`;
 
-  const completedHTML = completedBuckets.length
-    ? `<div class="saving-section-label" style="margin:20px 0 10px;font-size:0.72rem;font-weight:600;color:var(--txt-muted);text-transform:uppercase;letter-spacing:0.03em;">🏁 Selesai (${completedBuckets.length})</div>`
-      + completedBuckets.map(b => bucketCardHTML(b)).join('')
-    : '';
+  const shownBuckets = tab==='active' ? activeBuckets : completedBuckets;
+  const cardsHTML = shownBuckets.length
+    ? shownBuckets.map(b => bucketCardHTML(b)).join('')
+    : (tab==='active'
+        ? emptyState('🪣','Belum ada kantong aktif','Ketuk "+ Buat" untuk mulai')
+        : emptyState('🏁','Belum ada kantong tercapai','Kantong yang ditandai selesai akan muncul di sini'));
 
-  list.innerHTML = activeHTML + completedHTML;
+  list.innerHTML = tabsHTML + cardsHTML;
+
+  $$('#saving-bucket-list .saving-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      APP.savingBucketTab = btn.dataset.tab;
+      renderTabungan();
+    });
+  });
 
   // Listeners
   $$('#saving-bucket-list [data-action]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const {bid, action} = btn.dataset;
       if (action==='deposit') openSavingTxSheet('deposit', bid);
       else if (action==='withdraw') openSavingTxSheet('withdraw', bid);
       else if (action==='edit') openBucketSheet(bid);
       else if (action==='complete') {
         const b = APP.savingBuckets.find(x=>x.id===bid);
-        if(b){ b.status='completed'; b.completedAt=todayStr(); }
+        if (!b) return;
+        const bal = getBucketBalance(bid);
+        const reachedFull = b.target > 0 && bal >= b.target;
+        // Completing below 100% is allowed, but needs an explicit confirm —
+        // and its progress bar will keep showing the real percentage
+        // (never locked to 100%), since it never actually got there.
+        if (b.target > 0 && !reachedFull) {
+          const pct = Math.round((bal/b.target)*100);
+          const ok = await askConfirm(
+            `Progress kantong ini baru ${pct}% dari target. Tetap tandai selesai?`,
+            {title:'Yakin tandai selesai?', icon:'🏁'}
+          );
+          if (!ok) return;
+        }
+        b.status='completed'; b.completedAt=todayStr(); b.achievedFull=reachedFull;
         persist(); renderTabungan();
         showToast('🏁 Kantong ditandai selesai','success');
       }
       else if (action==='reactivate') {
         const b = APP.savingBuckets.find(x=>x.id===bid);
-        if(b){ b.status='active'; delete b.completedAt; }
+        if(b){ b.status='active'; delete b.completedAt; delete b.achievedFull; }
         persist(); renderTabungan();
         showToast('🔓 Kantong dibuka lagi, bisa nabung lagi','success');
       }
@@ -1035,7 +1124,16 @@ function renderTabungan() {
 function bucketCardHTML(b) {
   const done = b.status === 'completed';
   const bal = getBucketBalance(b.id);
-  const pct = b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null;
+  // A bucket that genuinely hit 100% before being marked complete keeps
+  // showing 100% forever (the achievement stays even after withdrawing the
+  // money) — but one completed early below target just shows its real,
+  // unlocked percentage, since it never actually got there.
+  const lockedFull = done && b.achievedFull && b.target > 0;
+  const pct = lockedFull ? 100 : (b.target > 0 ? Math.min(Math.round((bal/b.target)*100),100) : null);
+  // Only shown once the bucket is fully drained to zero — tells the user
+  // where the money that the 100% bar implies actually went, instead of
+  // just silently showing a full bar next to "Rp 0".
+  const fullyWithdrawn = lockedFull && bal === 0;
   const recentTxs = APP.savingTxs.filter(t=>t.bucketId===b.id).slice(-3).reverse();
   // Collect unique wallets used for deposits in this bucket
   const usedWalletIds = [...new Set(APP.savingTxs.filter(t=>t.bucketId===b.id && t.type==='deposit').map(t=>t.walletId))];
@@ -1056,7 +1154,7 @@ function bucketCardHTML(b) {
       <div class="wcard-top">
         <div class="wcard-emoji">${b.emoji||'🪣'}</div>
         <div style="flex:1;min-width:0;">
-          <div class="wcard-name">${escapeHtml(b.name)} ${done?'<span style="font-size:0.62rem;font-weight:600;color:var(--income);background:rgba(34,197,94,0.12);border-radius:10px;padding:2px 8px;margin-left:4px;">✅ Selesai</span>':''}</div>
+          <div class="wcard-name">${escapeHtml(b.name)} ${done?'<span style="font-size:0.62rem;font-weight:600;color:var(--income);background:rgba(34,197,94,0.12);border-radius:10px;padding:2px 8px;margin-left:4px;">✅ Selesai</span>':''}${fullyWithdrawn?' <span style="font-size:0.62rem;font-weight:600;color:var(--expense);background:rgba(239,68,68,0.12);border-radius:10px;padding:2px 8px;margin-left:4px;">💸 Sudah Ditarik</span>':''}</div>
           ${walletTags ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;">${walletTags}</div>` : ''}
           <div class="wcard-count" style="margin-top:4px;">${recentTxs.length} transaksi terakhir</div>
         </div>
@@ -1558,10 +1656,13 @@ function renderKalenderDetail() {
 
   // Transactions
   const txHTML=dayTxs.map(t=>{
-    // Same display mapping as txItemHTML: a saving_transfer withdraw looks
-    // like income, a deposit looks like expense — driven by `direction`,
-    // not `type`, so it stays excluded from real income/expense stats.
-    const dispType = t.type==='saving_transfer' ? (t.direction==='withdraw'?'income':'expense') : t.type;
+    // Same display mapping as txItemHTML: a saving_transfer withdraw or a
+    // debt_transfer 'in' looks like income; deposit/'out' looks like expense
+    // — driven by `direction`, not `type`, so it stays excluded from real
+    // income/expense stats.
+    const dispType = t.type==='saving_transfer' ? (t.direction==='withdraw'?'income':'expense')
+                    : t.type==='debt_transfer'   ? (t.direction==='in'?'income':'expense')
+                    : t.type;
     const cats=getCatList(dispType==='income'?'income':'expense');
     const cat=cats.find(c=>c.id===t.catId)||{emoji:'💸',name:t.catId};
     return `<div class="cal-tx-item">
@@ -1954,12 +2055,13 @@ async function submitDebt() {
           {title:'Sesuaikan histori transaksi?', icon:'🔄'}
         );
         if (wantSync) {
-          const txType = dtype==='borrowed' ? 'income' : 'expense';
-          linkedTx.type     = txType;
-          linkedTx.amount   = amount;
-          linkedTx.walletId = walletId;
-          linkedTx.catId    = txType==='income' ? 'other_inc' : 'other_exp';
-          linkedTx.desc     = dtype==='borrowed' ? `Hutang dari ${name}` : `Pinjaman ke ${name}`;
+          const direction = dtype==='borrowed' ? 'in' : 'out';
+          linkedTx.type      = 'debt_transfer';
+          linkedTx.direction = direction;
+          linkedTx.amount    = amount;
+          linkedTx.walletId  = walletId;
+          linkedTx.catId     = 'debt_transfer';
+          linkedTx.desc      = dtype==='borrowed' ? `Hutang dari ${name}` : `Pinjaman ke ${name}`;
           showToast('✅ Hutang & transaksi terkait diperbarui');
         } else {
           showToast('✅ Hutang diperbarui (histori transaksi lama tidak diubah)');
@@ -1980,13 +2082,16 @@ async function submitDebt() {
     };
     APP.debts.push(debt);
 
-    // Auto-create transaction to reflect on saldo
+    // Auto-create transaction to reflect on saldo. type:'debt_transfer' (not
+    // income/expense) means borrowing/lending money moves cash but is never
+    // counted as real income/expense — same reasoning as saving_transfer:
+    // it's a liability/receivable, not something you earned or spent.
     const txDesc = dtype==='borrowed' ? `Hutang dari ${name}` : `Pinjaman ke ${name}`;
-    const txType = dtype==='borrowed' ? 'income' : 'expense'; // borrowed = saldo naik, lent = saldo turun
+    const direction = dtype==='borrowed' ? 'in' : 'out'; // borrowed = saldo naik, lent = saldo turun
     APP.transactions.push({
-      id:genId(), type:txType, amount,
+      id:genId(), type:'debt_transfer', direction, amount,
       desc:txDesc, date:todayStr(),
-      walletId, catId: txType==='income'?'other_inc':'other_exp',
+      walletId, catId:'debt_transfer',
       note:`[Otomatis] ${note}`, photo:null,
       debtRef: debt.id, // link back
     });
@@ -2064,15 +2169,17 @@ function submitPayment() {
     showToast(isLent ? `💰 +${formatRp(amount)} diterima kembali` : `✅ Cicilan ${formatRp(amount)} dibayar`);
   }
 
-  // Create transaction to update saldo
-  // borrowed paying back  = expense (saldo turun)
-  // lent receiving back   = income  (saldo naik)
-  const txType = isLent ? 'income' : 'expense';
+  // Create transaction to update saldo. Same as debt creation above: this is
+  // a debt_transfer, not real income/expense — repaying/collecting a debt
+  // isn't spending or earning, it's settling a liability/receivable.
+  // borrowed paying back  = cash out (saldo turun)
+  // lent receiving back   = cash in  (saldo naik)
+  const direction = isLent ? 'in' : 'out';
   const txDesc = isLent ? `Terima kembali dari ${d.name}` : `Bayar hutang ke ${d.name}`;
   APP.transactions.push({
-    id:genId(), type:txType, amount,
+    id:genId(), type:'debt_transfer', direction, amount,
     desc:txDesc, date,
-    walletId, catId: txType==='income'?'other_inc':'other_exp',
+    walletId, catId:'debt_transfer',
     note: note ? `[Cicilan] ${note}` : '[Cicilan hutang]',
     photo:null,
     debtRef: d.id,
@@ -2196,7 +2303,12 @@ function exportCSV() {
   showToast('📊 CSV diekspor');
 }
 function exportJSON() {
-  const data = {app:'Azar Finance',version:APP_VERSION,exported:new Date().toISOString(),transactions:APP.transactions,goals:APP.goals,debts:APP.debts,wallets:APP.wallets};
+  const data = {
+    app:'Azar Finance', version:APP_VERSION, exported:new Date().toISOString(),
+    transactions:APP.transactions, goals:APP.goals, debts:APP.debts, wallets:APP.wallets,
+    savingBuckets:APP.savingBuckets, savingTxs:APP.savingTxs,
+    budgets:APP.budgets, reminders:APP.reminders, customCats:APP.customCats,
+  };
   dlBlob(JSON.stringify(data,null,2), `azar-finance-backup-${todayStr()}.json`, 'application/json');
   showToast('💾 JSON diekspor');
 }
@@ -2209,17 +2321,31 @@ function importJSON(file) {
       if (Array.isArray(data)) {
         APP.transactions=[...data]; APP.goals=[]; APP.debts=[];
         APP.wallets=[{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
+        APP.savingBuckets=[]; APP.savingTxs=[]; APP.budgets=[]; APP.reminders=[]; APP.customCats=[];
       } else {
         APP.transactions = data.transactions || [];
         APP.goals        = data.goals        || [];
         APP.debts        = data.debts        || [];
         APP.wallets      = data.wallets?.length ? data.wallets : [{id:'default',name:'Dompet Tunai',emoji:'👛',initialBalance:0,createdAt:todayStr()}];
+        // Backups made before v5.5 won't have these keys — fall back to
+        // whatever's already loaded instead of wiping it out with [].
+        APP.savingBuckets = data.savingBuckets ?? APP.savingBuckets ?? [];
+        APP.savingTxs     = data.savingTxs     ?? APP.savingTxs     ?? [];
+        APP.budgets       = data.budgets       ?? APP.budgets       ?? [];
+        APP.reminders     = data.reminders     ?? APP.reminders     ?? [];
+        APP.customCats    = data.customCats    ?? APP.customCats    ?? [];
       }
       migrateLegacySavingTransfers();
+      migrateLegacyDebtTransfers();
+      const goalMigration = migrateLegacyGoalsToBuckets();
       await persist();
       APP.selectedWalletId = APP.wallets[0]?.id || 'default';
-      renderDashboard(); renderRiwayat();
+      renderDashboard(); renderRiwayat(); renderTabungan(); renderBudget();
       showToast(`✅ ${APP.transactions.length} transaksi diimpor`);
+      if (goalMigration) {
+        const savedNote = goalMigration.totalSaved > 0 ? ` Progress lama (≈${formatRpC(goalMigration.totalSaved)}) tidak ikut pindah — silakan tabung ulang manual kalau perlu.` : '';
+        setTimeout(()=>showToast(`⭐ ${goalMigration.count} Impian lama dikonversi jadi Kantong Tabungan.${savedNote}`, 'info', 6000), 2600);
+      }
     } catch(err) { showToast('❌ Gagal import: '+err.message,'error',3500); }
   };
   reader.readAsText(file);
@@ -2275,6 +2401,12 @@ async function init() {
   renderDashboard();
   renderBudget();
   renderTabungan();
+  if (APP._goalMigrationResult) {
+    const { count, totalSaved } = APP._goalMigrationResult;
+    const savedNote = totalSaved > 0 ? ` Progress lama (≈${formatRpC(totalSaved)}) tidak ikut pindah karena gak pernah terhubung ke dompet manapun — silakan tabung ulang manual kalau perlu.` : '';
+    showToast(`⭐ ${count} Impian lama dikonversi jadi Kantong Tabungan.${savedNote}`, 'info', 6000);
+    delete APP._goalMigrationResult;
+  }
   $('#fab-btn').style.display = 'none'; // dashboard page has no FAB
   setTimeout(() => {
     $('#app').style.display='flex';
@@ -2291,7 +2423,11 @@ async function init() {
   // FAB — context-aware
   $('#fab-btn').addEventListener('click', () => {
     const p = APP.currentPage;
-    if (p==='impian')    { openGoalSheet(); return; }
+    // NOTE: 'impian' page shows the Tabungan bucket system (see renderImpian
+    // → renderTabungan). openGoalSheet() was leftover from the older,
+    // pre-bucket "Impian" feature and created data that was never displayed
+    // anywhere — fixed in v5.4, see migrateLegacyGoalsToBuckets().
+    if (p==='impian')    { openBucketSheet(); return; }
     if (p==='hutang')    { openDebtSheet(); return; }
     if (p==='dompet')    { openWalletSheet(); return; }
     openTxSheet();
@@ -2553,6 +2689,11 @@ async function init() {
       if (t?.type === 'saving_transfer') {
         showToast('Kelola tabung/tarik dari halaman Tabungan ya','info');
         navigateTo('impian');
+        return;
+      }
+      if (t?.type === 'debt_transfer') {
+        showToast('Kelola hutang/piutang dari halaman Hutang ya','info');
+        navigateTo('hutang');
         return;
       }
       openTxSheet(txEdit.dataset.id); return;
