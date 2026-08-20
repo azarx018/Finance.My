@@ -1,0 +1,88 @@
+/* ================================================
+   AZAR FINANCE — base.css
+   Design tokens (CSS variables), dark mode overrides,
+   global reset, and cross-cutting utility classes.
+   Split from style.css v5.5 — Sprint 1 (see log.md)
+   ================================================ */
+
+:root {
+  --primary:       #16a34a;
+  --primary-light: #22c55e;
+  --primary-bg:    rgba(22,163,74,0.10);
+  --primary-glow:  rgba(34,197,94,0.25);
+
+  --income:    #16a34a;
+  --income-bg: rgba(22,163,74,0.10);
+  --expense:   #ef4444;
+  --expense-bg:rgba(239,68,68,0.10);
+  --warn:      #f59e0b;
+  --warn-bg:   rgba(245,158,11,0.10);
+  --info:      #3b82f6;
+  --info-bg:   rgba(59,130,246,0.10);
+
+  /* LIGHT MODE (default) */
+  --bg-base:    #f8fafc;
+  --bg-card:    #ffffff;
+  --bg-card2:   #f1f5f9;
+  --bg-input:   #f8fafc;
+  --bg-pill:    #f1f5f9;
+  --bg-nav:     #ffffff;
+  --bg-sheet:   #ffffff;
+
+  --txt-primary:   #0f172a;
+  --txt-secondary: #64748b;
+  --txt-muted:     #94a3b8;
+
+  --border:       #e2e8f0;
+  --border-focus: rgba(22,163,74,0.5);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:    0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg:    0 8px 32px rgba(0,0,0,0.10);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+
+  --font-main: 'Sora', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --nav-h:    64px;
+  --header-h: 56px;
+  --tr: 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Emerald accent scale — used by override rules at the end of pages.css
+   to unify active/selected states across pages. Declared here since
+   custom-property declarations aren't order-sensitive like other rules. */
+:root {
+  --emerald-50:  #f0fdf4;
+  --emerald-100: #dcfce7;
+  --emerald-200: #bbf7d0;
+  --emerald-500: #22c55e;
+  --emerald-600: #16a34a;
+  --emerald-700: #15803d;
+  --emerald-800: #166534;
+  --emerald-900: #14532d;
+}
+
+/* DARK MODE */
+body.dark-mode {
+  --bg-base:  #0a0f1a;  --bg-card:  #111827;  --bg-card2: #1a2235;
+  --bg-input: #1a2235;  --bg-pill:  #1a2235;  --bg-nav:   #0d1526;
+  --bg-sheet: #111827;
+  --txt-primary:#f1f5f9; --txt-secondary:#94a3b8; --txt-muted:#475569;
+  --border:#1e293b; --shadow-sm:0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md:0 4px 16px rgba(0,0,0,0.3); --shadow-lg:0 8px 32px rgba(0,0,0,0.4);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:16px;-webkit-text-size-adjust:100%;}
+body{font-family:var(--font-main);background:var(--bg-base);color:var(--txt-primary);min-height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased;transition:background var(--tr),color var(--tr);}
+button{cursor:pointer;border:none;background:none;font-family:inherit;-webkit-tap-highlight-color:transparent;}
+input,select,textarea{font-family:inherit;outline:none;}
+::-webkit-scrollbar{width:0;}
+
+/* ===== UTILS ===== */
+.green{color:var(--income);}
+.red{color:var(--expense);}
+.orange{color:var(--warn);}

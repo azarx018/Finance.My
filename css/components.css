@@ -1,0 +1,90 @@
+/* ================================================
+   AZAR FINANCE — components.css
+   Reusable form & bottom-sheet input components,
+   shared across transaction/wallet/debt/saving/budget sheets.
+   Split from style.css v5.5 — Sprint 1 (see log.md)
+   ================================================ */
+
+/* ===== FORMS ===== */
+.input-group{margin-bottom:16px;}
+.input-group.mt4{margin-top:4px;}
+.input-label{display:block;font-size:0.7rem;font-weight:700;color:var(--txt-secondary);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:7px;}
+.amount-wrapper{display:flex;align-items:center;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius-md);overflow:hidden;transition:all var(--tr);}
+.amount-wrapper:focus-within{border-color:var(--border-focus);box-shadow:0 0 0 3px var(--primary-bg);}
+.currency-prefix{padding:0 11px 0 14px;font-family:var(--font-mono);font-size:0.95rem;font-weight:600;color:var(--txt-secondary);flex-shrink:0;border-right:1px solid var(--border);}
+.amount-input{flex:1;padding:13px 14px;background:transparent;color:var(--txt-primary);font-family:var(--font-mono);font-size:1.25rem;font-weight:600;border:none;width:100%;}
+.amount-input::placeholder{color:var(--txt-muted);font-size:0.95rem;}
+.text-input{width:100%;padding:12px 14px;background:var(--bg-input);border:1.5px solid var(--border);border-radius:var(--radius-md);color:var(--txt-primary);font-size:0.88rem;transition:all var(--tr);}
+.text-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px var(--primary-bg);}
+.text-input::placeholder{color:var(--txt-muted);}
+.textarea-input{resize:none;line-height:1.5;}
+.select-input{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:36px;}
+.date-input{appearance:none;-webkit-appearance:none;}
+.date-input::-webkit-calendar-picker-indicator{filter:invert(0.4);cursor:pointer;}
+.submit-btn{width:100%;padding:14px;border-radius:var(--radius-md);font-size:0.92rem;font-weight:700;color:white;background:linear-gradient(135deg,#16a34a,#22c55e);box-shadow:0 4px 18px rgba(22,163,74,0.30);transition:all var(--tr);}
+.submit-btn:active{transform:scale(0.97);}
+.submit-btn.expense-mode{background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 18px rgba(239,68,68,0.30);}
+.cancel-btn{width:100%;padding:12px;border-radius:var(--radius-md);font-size:0.85rem;font-weight:600;color:var(--txt-secondary);background:var(--bg-pill);border:1px solid var(--border);transition:all var(--tr);}
+.cancel-btn:active{transform:scale(0.97);}
+.type-toggle{display:flex;background:var(--bg-pill);border-radius:var(--radius-md);padding:4px;margin-bottom:18px;gap:4px;}
+.type-btn{flex:1;padding:10px;border-radius:10px;font-size:0.82rem;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--txt-muted);transition:all var(--tr);}
+.type-btn svg{width:15px;height:15px;}
+.type-btn.active.income-btn{background:var(--income);color:white;box-shadow:0 2px 12px rgba(22,163,74,0.30);}
+.type-btn.active.expense-btn{background:var(--expense);color:white;box-shadow:0 2px 12px rgba(239,68,68,0.30);}
+.type-btn:active{transform:scale(0.95);}
+.cat-scroll{display:flex;gap:7px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
+.cat-scroll::-webkit-scrollbar{display:none;}
+.cat-pill{position:relative;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--border);background:var(--bg-pill);cursor:pointer;transition:all var(--tr);}
+.cat-pill.selected{border-color:var(--income);background:var(--income-bg);}
+.cat-pill.selected.expense-cat{border-color:var(--expense);background:var(--expense-bg);}
+.cat-pill.add-cat-pill{border-style:dashed;border-color:var(--txt-muted);opacity:0.85;}
+.cat-pill.add-cat-pill .cat-label{color:var(--txt-muted);}
+.cat-del-x{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:var(--expense);color:#fff;font-size:0.55rem;display:flex;align-items:center;justify-content:center;line-height:1;}
+.cat-emoji{font-size:1.1rem;}
+.cat-label{font-size:0.62rem;color:var(--txt-secondary);white-space:nowrap;}
+.cat-pill.selected .cat-label{color:var(--income);}
+.cat-pill.selected.expense-cat .cat-label{color:var(--expense);}
+.cat-pill:active{transform:scale(0.92);}
+.wallet-select-row{display:flex;gap:7px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;}
+.wallet-select-row::-webkit-scrollbar{display:none;}
+.wallet-pill{flex-shrink:0;display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg-pill);cursor:pointer;transition:all var(--tr);}
+.wallet-pill.selected{border-color:var(--info);background:var(--info-bg);}
+.wallet-pill-emoji{font-size:1rem;}
+.wallet-pill-name{font-size:0.78rem;font-weight:600;color:var(--txt-secondary);white-space:nowrap;}
+.wallet-pill.selected .wallet-pill-name{color:var(--info);}
+.wallet-pill:active{transform:scale(0.92);}
+.emoji-picker{display:flex;flex-wrap:wrap;gap:8px;}
+.emoji-opt{width:44px;height:44px;border-radius:11px;background:var(--bg-pill);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:1.3rem;cursor:pointer;transition:all var(--tr);}
+.emoji-opt.selected{border-color:var(--primary);background:var(--primary-bg);}
+.emoji-opt:active{transform:scale(0.9);}
+.photo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.photo-btn{padding:9px 14px;border-radius:10px;background:var(--bg-pill);border:1px solid var(--border);color:var(--txt-secondary);font-size:0.82rem;font-weight:600;}
+.photo-btn:active{transform:scale(0.95);}
+.photo-preview{width:60px;height:60px;border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
+.photo-preview img{width:100%;height:100%;object-fit:cover;}
+.photo-remove{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,0.6);border-radius:50%;color:white;font-size:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+
+/* ===== DEBT FORM EXTRAS ===== */
+.debt-type-toggle{display:flex;gap:9px;margin-bottom:18px;}
+.debt-type-btn{flex:1;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--radius-md);border:1.5px solid var(--border);background:var(--bg-pill);cursor:pointer;transition:all var(--tr);text-align:left;}
+.debt-type-btn.active.borrowed{border-color:var(--income);background:var(--income-bg);}
+.debt-type-btn.active.lent{border-color:var(--expense);background:var(--expense-bg);}
+.debt-type-btn:active{transform:scale(0.96);}
+.dtb-emoji{font-size:1.4rem;flex-shrink:0;}
+.dtb-title{font-size:0.82rem;font-weight:700;color:var(--txt-primary);margin-bottom:1px;}
+.dtb-sub{font-size:0.65rem;color:var(--txt-secondary);}
+.pay-remaining-card{background:var(--bg-pill);border:1px solid var(--border);border-radius:var(--radius-md);padding:13px 14px;margin-bottom:16px;}
+.prc-row{display:flex;margin-bottom:10px;}
+.prc-item{flex:1;text-align:center;border-right:1px solid var(--border);padding:0 4px;}
+.prc-item:last-child{border-right:none;}
+.prc-label{font-size:0.62rem;color:var(--txt-muted);margin-bottom:3px;}
+.prc-val{font-family:var(--font-mono);font-size:0.82rem;font-weight:700;color:var(--txt-primary);}
+.prc-val.green{color:var(--income);}
+.prc-val.red{color:var(--expense);}
+.prc-bar-bg{height:6px;background:var(--border);border-radius:99px;overflow:hidden;}
+.prc-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#16a34a,#22c55e);transition:width 0.5s ease;}
+.pay-quick-btns{display:flex;gap:9px;margin-bottom:16px;}
+.pay-quick-btn{flex:1;padding:9px;border-radius:10px;font-size:0.8rem;font-weight:700;border:1px solid var(--border);background:var(--bg-pill);color:var(--txt-secondary);transition:all var(--tr);}
+.pay-quick-btn:active{transform:scale(0.95);}
+
+@media(max-width:380px){.debt-type-toggle{flex-direction:column;}}
