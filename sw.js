@@ -1,14 +1,14 @@
 /* ================================================
-   AZAR FINANCE v5.7 — sw.js (Service Worker)
+   MY FINANCE v5.8 — sw.js (Service Worker)
+   (renamed from "Azar Finance" in v5.8 — see log.md)
    Offline Support · Cache First Strategy
    NOTE: CACHE_NAME must match the app version in
-   js/core/state.js (APP_VERSION — moved here from the old
-   script.js in the v5.7 module reconstruction, see log.md
-   Sprint 6) and index.html (.app-info-ver). Bumping it on
-   every release forces old cached assets to be replaced.
+   js/core/state.js (APP_VERSION) and index.html
+   (.app-info-ver). Bumping it on every release forces old
+   cached assets to be replaced.
    ================================================ */
 
-const CACHE_NAME = 'azar-finance-v5.7';
+const CACHE_NAME = 'my-finance-v5.8';
 const CACHE_URLS = [
   './',
   './index.html',
@@ -131,13 +131,13 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
 
   const data = event.data.json().catch(() => ({
-    title: 'Azar Finance',
+    title: 'My Finance',
     body: 'Jangan lupa catat pengeluaran hari ini!',
   }));
 
   event.waitUntil(
     data.then((payload) =>
-      self.registration.showNotification(payload.title || 'Azar Finance', {
+      self.registration.showNotification(payload.title || 'My Finance', {
         body: payload.body || 'Ada pengingat untuk Anda.',
         icon: './icon-192.svg',
         badge: './icon-192.svg',

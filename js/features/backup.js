@@ -14,7 +14,7 @@
 'use strict';
 
 import { APP, KEYS, APP_VERSION } from '../core/state.js';
-import { $, todayStr, showToast, formatRpC } from '../core/utils.js';
+import { $, $$, todayStr, showToast, formatRpC } from '../core/utils.js';
 import { persist } from '../core/db.js';
 import {
   migrateLegacyDebtTransfers, migrateLegacySavingTransfers, migrateLegacyGoalsToBuckets,
@@ -27,6 +27,19 @@ export function applyDark() {
   $('#icon-moon').style.display = APP.darkMode ? '' : 'none';
   $('#icon-sun').style.display  = APP.darkMode ? 'none' : '';
   const s = $('#dark-toggle-settings'); if (s) s.checked = APP.darkMode;
+}
+
+// ===================== THEME (v5.8 — see log.md) =====================
+// Sets body[data-theme] (read by css/base.css's theme blocks) and syncs the
+// Settings-page swatch picker + label. Independent of dark mode — a theme
+// defines brand/income/expense hue, dark mode toggles background lightness;
+// the two combine freely (e.g. Pink + Dark Mode).
+export function applyTheme() {
+  document.body.setAttribute('data-theme', APP.theme || 'emerald');
+  const labels = {emerald:'Emerald', pink:'Pink Elegan', ocean:'Ocean Blue'};
+  const lbl = $('#theme-current-label');
+  if (lbl) lbl.textContent = labels[APP.theme] || 'Emerald';
+  $$('.theme-swatch').forEach(sw => sw.classList.toggle('selected', sw.dataset.theme === APP.theme));
 }
 
 // ===================== AUTO BACKUP =====================
@@ -43,13 +56,13 @@ export function setAutoBackupLastDate(d) {
 export function doAutoBackup(silent = true) {
   if (!APP.transactions.length && !APP.goals.length && !APP.debts.length) return;
   const data = {
-    app: 'Azar Finance', version: APP_VERSION,
+    app: 'My Finance', version: APP_VERSION,
     exported: new Date().toISOString(), autoBackup: true,
     transactions: APP.transactions, goals: APP.goals,
     debts: APP.debts, wallets: APP.wallets,
   };
   dlBlob(JSON.stringify(data, null, 2),
-    `azar-finance-autobackup-${todayStr()}.json`, 'application/json');
+    `my-finance-autobackup-${todayStr()}.json`, 'application/json');
   setAutoBackupLastDate(todayStr());
   if (!silent) showToast('💾 Auto backup berhasil!', 'success');
 }
@@ -72,17 +85,17 @@ export function exportCSV() {
     t.date, t.walletId||'', t.catId||'', `"${(t.note||'').replace(/"/g,'""')}"`
   ]);
   const csv = ['ID,Tipe,Nominal,Deskripsi,Tanggal,Dompet,Kategori,Catatan', ...rows.map(r=>r.join(','))].join('\n');
-  dlBlob('\uFEFF'+csv, `azar-finance-${todayStr()}.csv`, 'text/csv;charset=utf-8;');
+  dlBlob('\uFEFF'+csv, `my-finance-${todayStr()}.csv`, 'text/csv;charset=utf-8;');
   showToast('📊 CSV diekspor');
 }
 export function exportJSON() {
   const data = {
-    app:'Azar Finance', version:APP_VERSION, exported:new Date().toISOString(),
+    app:'My Finance', version:APP_VERSION, exported:new Date().toISOString(),
     transactions:APP.transactions, goals:APP.goals, debts:APP.debts, wallets:APP.wallets,
     savingBuckets:APP.savingBuckets, savingTxs:APP.savingTxs,
     budgets:APP.budgets, reminders:APP.reminders, customCats:APP.customCats,
   };
-  dlBlob(JSON.stringify(data,null,2), `azar-finance-backup-${todayStr()}.json`, 'application/json');
+  dlBlob(JSON.stringify(data,null,2), `my-finance-backup-${todayStr()}.json`, 'application/json');
   showToast('💾 JSON diekspor');
 }
 export function importJSON(file) {

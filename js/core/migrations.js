@@ -78,12 +78,13 @@ export function migrateLegacyGoalsToBuckets() {
 
 export async function loadAll() {
   try {
-    const [tx, goals, debts, wallets, dark, notif, ntime, budgets, reminders, savingBuckets, savingTxs, customCats] = await Promise.all([
+    const [tx, goals, debts, wallets, dark, theme, notif, ntime, budgets, reminders, savingBuckets, savingTxs, customCats] = await Promise.all([
       idbGet(STORE_DATA,     KEYS.tx),
       idbGet(STORE_DATA,     KEYS.goals),
       idbGet(STORE_DATA,     KEYS.debts),
       idbGet(STORE_DATA,     KEYS.wallets),
       idbGet(STORE_SETTINGS, KEYS.dark),
+      idbGet(STORE_SETTINGS, KEYS.theme),
       idbGet(STORE_SETTINGS, KEYS.notif),
       idbGet(STORE_SETTINGS, KEYS.ntime),
       idbGet(STORE_DATA,     'budgets'),
@@ -102,6 +103,7 @@ export async function loadAll() {
     APP.savingTxs     = savingTxs      || [];
     APP.customCats    = customCats     || [];
     APP.darkMode     = dark    !== undefined ? dark  : false;
+    APP.theme        = theme  || 'emerald';
     APP.notifEnabled = notif   !== undefined ? notif : false;
     APP.notifTime    = ntime   || '20:00';
   } catch(e) {

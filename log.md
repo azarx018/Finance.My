@@ -1,5 +1,219 @@
 # Development Log
 
+## [5.8] — 2026-08-21 (Sprint 7 — new feature)
+
+### Type
+- Feature / Rebrand
+
+### Objective
+Rename the app from "Azar Finance" to "My Finance", and add a color-theme
+system with 3 selectable themes (Emerald default, Pink Elegan, Ocean Blue)
+— confirmed with you: 3 themes, and income/expense colors adapt per theme
+(not fixed green/red), Ocean Blue picked as the 3rd theme per my
+suggestion since you left it open.
+
+### Analysis
+Audited every hardcoded color in the CSS that represented "brand" (not
+semantic status) before touching anything, since a theme system only works
+if every one of those becomes a variable:
+- Confirmed `--primary`/`--income`/`--expense` were already CSS variables
+  referenced correctly by most component/page styles (tx-item colors,
+  cat-pill selected state, wallet balance sign, type-btn active — all
+  already `var()`-based and needed zero changes to pick up a new theme).
+- Found ~15 spots that bypassed those variables with literal hex: the
+  "unify" override block in `pages.css` (added back in Sprint 1, already
+  named `--emerald-*` — a strong signal this exact need was anticipated
+  architecturally, just not built yet), splash title/loader gradient,
+  3 inline SVG logo gradients in `index.html` (`stop-color="..."`
+  attributes, which don't respond to CSS at all — needed converting to
+  class-based `stop-color` so they could use `var()`), and several
+  `linear-gradient(...,#16a34a,#22c55e)` literals scattered across
+  `pages.css`/`components.css` (savings-rate bar, goal/debt-payment
+  progress bars, budget safe-zone bars, profile avatar, qa-btn icons).
+- **Decision on scope** (this is a judgment call, stated explicitly since
+  you asked for my take): kept `--warn` (orange) and `--info` (blue)
+  theme-neutral on purpose. Those are status/informational colors (budget
+  warnings, wallet chips) rather than brand identity — recoloring them per
+  theme would make "this budget is over" look different across themes for
+  no benefit, and could accidentally reduce clarity. Only `--primary`
+  (brand chrome: FAB, balance card, active nav/pills) and
+  `--income`/`--expense` (which you asked to adapt) are theme-driven.
+- Renamed the `--emerald-*` scale to `--accent-*` since it's no longer
+  emerald-specific — it's the currently-active theme's 10-step scale, used
+  by the override block for FAB/balance-card/nav-active/pill-active. Also
+  routed 3 previously-hardcoded `rgba(21,128,61,...)` glow shadows in that
+  block through the already-defined `var(--primary-glow)` (each theme
+  defines its own), so shadows recolor too, not just fills.
+- For 2-tone gradients that need a lighter/darker variant of a single
+  theme color (`qa-btn` icons, `hutang-card-summary`), used CSS
+  `color-mix(in srgb, var(--expense) 80%, black)` rather than hand-picking
+  a second literal color per theme — one gradient formula that
+  automatically works correctly for all 3 (and any future) themes instead
+  of needing a second hardcoded color per theme per gradient.
+- **Data-safety check before any renaming**: grepped every remaining
+  "Azar Finance" / "azar-finance" / "azf3_" occurrence in the codebase and
+  categorized each one before changing anything. `DB_NAME =
+  'AzarFinanceDB'` (the actual IndexedDB database name already on every
+  existing user's device) and every `azf3_*` key in `KEYS`
+  (`js/core/state.js`) and `BACKUP_LAST_KEY` (`js/features/backup.js`)
+  were **left untouched and given an explicit warning comment** — renaming
+  any of these would make the app open a new, empty database and silently
+  orphan every existing user's transactions/wallets/debts. Only display
+  strings (splash title, header, settings, push-notification text) and
+  generated filenames (CSV/JSON export, autobackup) were renamed — none of
+  which affect data continuity, and `importJSON()` doesn't validate against
+  the `app:` metadata field, so old backups exported under the old name
+  still import correctly.
+
+### Changes
+**Theme system:**
+- `css/base.css`: added 3 `body[data-theme="..."]` blocks (`emerald` /
+  default, `pink`, `ocean`), each defining `--primary`, `--primary-light`,
+  `--primary-bg`, `--primary-glow`, `--income(-bg)`, `--expense(-bg)`, and
+  a 10-step `--accent-50..900` scale. Removed the old static `--emerald-*`
+  block (fully superseded).
+- `css/pages.css`: rewrote the Sprint-1 "unify" override block to use
+  `--accent-*`/`--primary-glow` instead of hardcoded `--emerald-*`/rgba;
+  converted ~9 hardcoded green gradients (savings-rate bar, goal-progress-
+  fill, debt-payment-progress-fill, profile avatar, budget/settings safe-
+  zone bars, qa-btn income/expense icons, hutang-card-summary) to
+  `var()`/`color-mix()`-based equivalents; added `.theme-swatch.selected`
+  styling for the new Settings picker.
+- `css/layout.css`: splash title/loader gradients now theme-aware;
+  added `.theme-stop-light`/`.theme-stop-dark` classes for the inline SVG
+  logo gradients.
+- `css/components.css`: debt-payment-remaining progress bar (`.prc-bar-
+  fill`) now theme-aware.
+- `index.html`: 3 inline SVG gradients (splash icon, header logo, settings
+  app-info icon) switched from hardcoded `stop-color="#hex"` attributes to
+  `class="theme-stop-light/dark"` (attribute `stop-color` doesn't respond
+  to CSS at all — this was a real fix, not just a refactor). Added a theme
+  picker UI to Settings → Tampilan (3 swatches above Dark Mode).
+- `js/core/state.js`: added `APP.theme` (default `'emerald'`) and
+  `KEYS.theme`.
+- `js/core/db.js`: `saveSettings()` now persists `APP.theme`.
+- `js/core/migrations.js`: `loadAll()` now loads the saved theme (defaults
+  to `'emerald'` for both new and pre-existing users — picking a theme
+  never changes anything for someone who's never opened the picker).
+- `js/features/backup.js`: added `applyTheme()` (sets
+  `body[data-theme]`, syncs the Settings label + swatch selection),
+  alongside the existing `applyDark()`.
+- `js/app.js`: imports and calls `applyTheme()` during `init()` (right
+  after `applyDark()`); added the theme-swatch click listener (sets
+  `APP.theme`, calls `applyTheme()` + `saveSettings()`, shows a toast) — 3
+  new listeners, bringing the total from 107 to 110.
+
+**Rename ("Azar Finance" → "My Finance"):**
+- `index.html`: `<title>`, `apple-mobile-web-app-title` meta, splash
+  title, settings profile name, settings app-info name (5 occurrences).
+- `manifest.json`: `name` and `short_name`.
+- `sw.js`: header comment; push-notification fallback title text
+  (`'Azar Finance'` → `'My Finance'`, display text only — see Analysis for
+  why `CACHE_NAME`'s prefix was also cosmetically renamed to
+  `my-finance-v5.8`, which is safe since it's just a cache-storage label,
+  not a data key).
+- `js/features/reminder.js`: daily local-notification title text.
+- `js/features/backup.js`: export metadata `app:` field value, and the
+  `azar-finance-*` filename prefixes for CSV export, JSON export, and
+  autobackup files → `my-finance-*`.
+- **Explicitly NOT renamed** (see Analysis — data safety): `DB_NAME` in
+  `js/core/db.js`, every key in `KEYS` (`js/core/state.js`),
+  `BACKUP_LAST_KEY` in `js/features/backup.js`. Added a warning comment on
+  `DB_NAME` specifically so a future rebrand doesn't rename it by
+  reflex.
+
+### Files
+- Modified: `css/base.css`, `css/pages.css`, `css/layout.css`,
+  `css/components.css`, `index.html`, `manifest.json`, `sw.js`,
+  `js/core/state.js`, `js/core/db.js`, `js/core/migrations.js`,
+  `js/features/backup.js`, `js/features/reminder.js`, `js/app.js`
+
+### Architecture Impact
+No structural change to the module graph — this sprint only added new
+exports (`applyTheme`) and new state (`APP.theme`) following the exact
+patterns already established for dark mode in Sprints 2–6. The theme
+system is deliberately orthogonal to dark mode (a `data-theme` attribute
+alongside the existing `.dark-mode` class), so they combine freely instead
+of needing 6 separate light/dark × 3-theme variants.
+
+### Behavior Impact
+For existing users: **none** — `APP.theme` defaults to `'emerald'`, which
+was designed to reproduce the exact original v5.7 colors (verified by
+diffing every value in the `emerald` theme block against what the
+hardcoded colors used to be). Someone who never opens the theme picker
+sees no change at all. For anyone who does pick Pink or Ocean: brand chrome
+(FAB, balance card, active nav/pills, splash) and transaction colors
+(income/expense, progress bars) recolor together; budget-warning orange and
+wallet-info blue stay constant across all 3 themes by design (see
+Analysis).
+
+### Data / Storage Impact
+None to existing data. One new settings key (`azf3_theme`) added
+alongside the existing `azf3_dark`/`azf3_notif`/`azf3_ntime` — additive,
+same pattern, no migration needed (missing key defaults to `'emerald'`,
+same as `loadAll()` already does for `notifTime`/etc.). `DB_NAME` and all
+existing data keys explicitly preserved — see Analysis for why this
+mattered here specifically (a rename task is exactly the kind of change
+that could accidentally break this if not checked deliberately).
+
+### PWA Impact
+`sw.js` `CACHE_NAME` bumped to `v5.8` (required — some cached file
+contents changed, e.g. `index.html`'s SVG markup and every touched CSS
+file, even though the file list itself didn't grow this sprint).
+`manifest.json`'s `name`/`short_name` changed, which will update the
+app's name on users' home screens/app switchers next time they reinstall
+or their OS refreshes the manifest (existing installs may keep the old
+name until then — this is normal PWA manifest-update behavior, not a bug
+in this change).
+
+### Versioning
+Version before: `5.7`
+Version after: `5.8` (MINOR — new feature, backward-compatible; no data
+format change, no breaking change to any existing behavior for users who
+don't touch the new theme picker)
+
+### Verification
+- [x] CSS brace balance — all 4 CSS files checked programmatically
+      (opening `{` count == closing `}` count), all balanced
+- [x] No leftover `--emerald-*` references anywhere in `css/` (only the
+      string `"emerald"` remains, as the theme *name*, not a stale
+      variable)
+- [x] Full `js/app.js` import graph re-verified via Node after all
+      changes — loads cleanly
+- [x] `sw.js` precache list still matches the actual file tree exactly
+      (no files were added/removed this sprint, only content changed, so
+      this re-confirms nothing was accidentally dropped)
+- [x] Version agreement — `5.8` present in `js/core/state.js`,
+      `index.html`, `sw.js` (both header comment and `CACHE_NAME`)
+- [x] Data-safety grep — every remaining "Azar Finance"/"azar-finance"/
+      "azf3_" occurrence in the codebase individually reviewed and
+      categorized (cosmetic vs. data-critical) before any renaming, not
+      assumed safe by pattern-matching
+- [ ] Runtime/browser verification — **not performed**, same limitation as
+      Sprint 6. This sprint touches visual rendering directly (gradients,
+      CSS variables, inline SVG), which is exactly the kind of change
+      static analysis is weakest at catching (a CSS variable typo would
+      silently fall back to an unstyled/transparent color, not throw an
+      error). **Please verify in-browser**: open Settings → Tampilan, tap
+      each of the 3 theme swatches, and confirm the balance card, FAB,
+      active bottom-nav icon, and income/expense colors on Dashboard all
+      update together; then toggle Dark Mode on top of each theme to
+      confirm they combine correctly; then reload the page and confirm the
+      chosen theme persists.
+
+### Known Issues
+Unchanged from Sprint 6 (push-handler bug, unused `getTotalNetWorth()`,
+4 legacy Impian functions) — none touched or affected by this sprint.
+
+### Next Steps
+Pending your in-browser check of the theme picker. If anything looks off
+in a specific theme (a color that doesn't read well, a gradient that looks
+flat), that's a quick, isolated fix in `css/base.css`'s theme blocks —
+nothing else needs to change. Also still open from Sprint 6: your call on
+whether to remove the 3 confirmed-dead-code items now as a clean PATCH.
+
+---
+
 ## [5.7] — 2026-08-20 (Sprint 6 — CUTOVER)
 
 ### Type

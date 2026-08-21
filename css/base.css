@@ -5,16 +5,44 @@
    Split from style.css v5.5 — Sprint 1 (see log.md)
    ================================================ */
 
-:root {
-  --primary:       #16a34a;
-  --primary-light: #22c55e;
-  --primary-bg:    rgba(22,163,74,0.10);
-  --primary-glow:  rgba(34,197,94,0.25);
+/* ================================================
+   THEMES (v5.8 — see log.md)
+   3 selectable color themes, applied via body[data-theme].
+   Each theme sets: brand colors (--primary/-light/-bg/-glow),
+   income/expense colors + their -bg tints, and a 10-step
+   --accent-50..900 scale (used by the "unify" override block
+   in pages.css for FAB/balance-card/active states).
+   Default (no data-theme attribute, or data-theme="emerald")
+   matches the original v5.7 look exactly — picking a theme
+   never changes anything for someone who doesn't open the
+   picker. Semantic warn(orange)/info(blue) stay theme-neutral
+   on purpose — they're status colors (budget warnings, wallet
+   info), not brand identity, so they stay recognizable no
+   matter which theme is active.
+   ================================================ */
+body, body[data-theme="emerald"] {
+  --primary:#16a34a; --primary-light:#22c55e; --primary-bg:rgba(22,163,74,0.10); --primary-glow:rgba(34,197,94,0.25);
+  --income:#16a34a; --income-bg:rgba(22,163,74,0.10);
+  --expense:#ef4444; --expense-bg:rgba(239,68,68,0.10);
+  --accent-50:#f0fdf4; --accent-100:#dcfce7; --accent-200:#bbf7d0; --accent-500:#22c55e;
+  --accent-600:#16a34a; --accent-700:#15803d; --accent-800:#166534; --accent-900:#14532d;
+}
+body[data-theme="pink"] {
+  --primary:#db2777; --primary-light:#ec4899; --primary-bg:rgba(219,39,119,0.10); --primary-glow:rgba(236,72,153,0.28);
+  --income:#e11d48; --income-bg:rgba(225,29,72,0.10);
+  --expense:#9f1239; --expense-bg:rgba(159,18,57,0.12);
+  --accent-50:#fdf2f8; --accent-100:#fce7f3; --accent-200:#fbcfe8; --accent-500:#ec4899;
+  --accent-600:#db2777; --accent-700:#be185d; --accent-800:#9d174d; --accent-900:#831843;
+}
+body[data-theme="ocean"] {
+  --primary:#0284c7; --primary-light:#38bdf8; --primary-bg:rgba(2,132,199,0.10); --primary-glow:rgba(56,189,248,0.28);
+  --income:#0891b2; --income-bg:rgba(8,145,178,0.10);
+  --expense:#ea580c; --expense-bg:rgba(234,88,12,0.10);
+  --accent-50:#f0f9ff; --accent-100:#e0f2fe; --accent-200:#bae6fd; --accent-500:#38bdf8;
+  --accent-600:#0284c7; --accent-700:#0369a1; --accent-800:#075985; --accent-900:#0c4a6e;
+}
 
-  --income:    #16a34a;
-  --income-bg: rgba(22,163,74,0.10);
-  --expense:   #ef4444;
-  --expense-bg:rgba(239,68,68,0.10);
+:root {
   --warn:      #f59e0b;
   --warn-bg:   rgba(245,158,11,0.10);
   --info:      #3b82f6;
@@ -49,20 +77,6 @@
   --nav-h:    64px;
   --header-h: 56px;
   --tr: 0.2s cubic-bezier(0.4,0,0.2,1);
-}
-
-/* Emerald accent scale — used by override rules at the end of pages.css
-   to unify active/selected states across pages. Declared here since
-   custom-property declarations aren't order-sensitive like other rules. */
-:root {
-  --emerald-50:  #f0fdf4;
-  --emerald-100: #dcfce7;
-  --emerald-200: #bbf7d0;
-  --emerald-500: #22c55e;
-  --emerald-600: #16a34a;
-  --emerald-700: #15803d;
-  --emerald-800: #166534;
-  --emerald-900: #14532d;
 }
 
 /* DARK MODE */

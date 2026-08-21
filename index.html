@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#ffffff"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="Azar Finance"/>
-  <title>Azar Finance</title>
+  <meta name="apple-mobile-web-app-title" content="My Finance"/>
+  <title>My Finance</title>
   <link rel="manifest" href="manifest.json"/>
   <link rel="icon" type="image/svg+xml" href="icon-192.svg"/>
   <link rel="apple-touch-icon" href="icon-192.svg"/>
@@ -31,10 +31,10 @@
       <svg viewBox="0 0 48 48" fill="none">
         <rect x="4" y="4" width="40" height="40" rx="14" fill="url(#sg)"/>
         <circle cx="24" cy="24" r="7" fill="white" opacity="0.9"/>
-        <defs><linearGradient id="sg" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs>
+        <defs><linearGradient id="sg" x1="4" y1="4" x2="44" y2="44"><stop class="theme-stop-light"/><stop offset="1" class="theme-stop-dark"/></linearGradient></defs>
       </svg>
     </div>
-    <h1 class="splash-title">Azar Finance</h1>
+    <h1 class="splash-title">My Finance</h1>
     <p class="splash-sub">Catat. Kelola. Bijak.</p>
   </div>
   <div class="splash-loader"><div class="splash-bar"></div></div>
@@ -50,7 +50,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
       <div class="app-logo-sm" id="header-logo">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#gh)"/><circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/><defs><linearGradient id="gh" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
+        <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#gh)"/><circle cx="12" cy="12" r="4" fill="white" opacity="0.9"/><defs><linearGradient id="gh" x1="2" y1="2" x2="22" y2="22"><stop class="theme-stop-light"/><stop offset="1" class="theme-stop-dark"/></linearGradient></defs></svg>
       </div>
       <span class="header-title" id="page-title">Dashboard</span>
     </div>
@@ -475,7 +475,7 @@
     <div class="scroll-area">
       <div class="profile-card">
         <div class="profile-avatar">A</div>
-        <div class="profile-info"><div class="profile-name">Azar Finance</div><div class="profile-sub">Kelola keuanganmu dengan bijak</div></div>
+        <div class="profile-info"><div class="profile-name">My Finance</div><div class="profile-sub">Kelola keuanganmu dengan bijak</div></div>
       </div>
       <div class="settings-section">
         <div class="settings-title">Aplikasi</div>
@@ -496,6 +496,26 @@
       </div>
       <div class="settings-section">
         <div class="settings-title">Tampilan</div>
+        <div class="settings-item" style="flex-direction:column;align-items:stretch;gap:10px;">
+          <div style="display:flex;align-items:center;gap:13px;">
+            <div class="si-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.648-1.688h1.996c3.051 0 5.555-2.503 5.555-5.554C22 6.012 17.461 2 12 2z"/></svg></div>
+            <div class="si-text"><div class="si-title">Tema Warna</div><div class="si-desc" id="theme-current-label">Emerald</div></div>
+          </div>
+          <div id="theme-picker-row" style="display:flex;gap:10px;">
+            <div class="theme-swatch" data-theme="emerald" style="flex:1;border-radius:12px;padding:10px 8px;text-align:center;cursor:pointer;border:1.5px solid var(--border);">
+              <div style="width:100%;height:28px;border-radius:8px;background:linear-gradient(135deg,#166534,#16a34a,#22c55e);margin-bottom:6px;"></div>
+              <span style="font-size:0.68rem;color:var(--txt-secondary);">🌿 Emerald</span>
+            </div>
+            <div class="theme-swatch" data-theme="pink" style="flex:1;border-radius:12px;padding:10px 8px;text-align:center;cursor:pointer;border:1.5px solid var(--border);">
+              <div style="width:100%;height:28px;border-radius:8px;background:linear-gradient(135deg,#831843,#db2777,#ec4899);margin-bottom:6px;"></div>
+              <span style="font-size:0.68rem;color:var(--txt-secondary);">🌸 Pink Elegan</span>
+            </div>
+            <div class="theme-swatch" data-theme="ocean" style="flex:1;border-radius:12px;padding:10px 8px;text-align:center;cursor:pointer;border:1.5px solid var(--border);">
+              <div style="width:100%;height:28px;border-radius:8px;background:linear-gradient(135deg,#0c4a6e,#0284c7,#38bdf8);margin-bottom:6px;"></div>
+              <span style="font-size:0.68rem;color:var(--txt-secondary);">🌊 Ocean Blue</span>
+            </div>
+          </div>
+        </div>
         <div class="settings-item"><div class="si-icon dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div><div class="si-text"><div class="si-title">Dark Mode</div><div class="si-desc">Tampilan gelap</div></div><label class="toggle-switch"><input type="checkbox" id="dark-toggle-settings" checked/><span class="toggle-slider"></span></label></div>
       </div>
       <div class="settings-section">
@@ -503,9 +523,9 @@
         <div class="settings-item danger-item" id="btn-reset"><div class="si-icon red"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></div><div class="si-text"><div class="si-title">Reset Semua Data</div><div class="si-desc">Hapus semua data permanen</div></div><div class="si-arrow" style="color:var(--clr-expense)">›</div></div>
       </div>
       <div class="app-info">
-        <svg viewBox="0 0 48 48" fill="none" width="36" height="36"><rect x="4" y="4" width="40" height="40" rx="14" fill="url(#gi2)"/><circle cx="24" cy="24" r="6" fill="white" opacity="0.9"/><defs><linearGradient id="gi2" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#22c55e"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
-        <div class="app-info-name">Azar Finance</div>
-        <div class="app-info-ver">v5.7 · PWA Ready</div>
+        <svg viewBox="0 0 48 48" fill="none" width="36" height="36"><rect x="4" y="4" width="40" height="40" rx="14" fill="url(#gi2)"/><circle cx="24" cy="24" r="6" fill="white" opacity="0.9"/><defs><linearGradient id="gi2" x1="4" y1="4" x2="44" y2="44"><stop class="theme-stop-light"/><stop offset="1" class="theme-stop-dark"/></linearGradient></defs></svg>
+        <div class="app-info-name">My Finance</div>
+        <div class="app-info-ver">v5.8 · PWA Ready</div>
         <div class="app-info-badge">Update v4 · Tabungan · Budget · Kalender</div>
       </div>
     </div>

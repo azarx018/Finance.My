@@ -57,7 +57,7 @@ export function startNotifLoop() {
       const k = 'azf_nlast';
       const _nlast = (() => { try { return localStorage.getItem(k); } catch { return ''; } })();
       if (_nlast !== todayStr()) {
-        new Notification('Azar Finance 💰',{body:'Jangan lupa catat pengeluaran hari ini!',icon:'icon-192.svg'});
+        new Notification('My Finance 💰',{body:'Jangan lupa catat pengeluaran hari ini!',icon:'icon-192.svg'});
         try { localStorage.setItem(k, todayStr()); } catch {}
       }
     }

@@ -82,7 +82,7 @@
 .prc-val.green{color:var(--income);}
 .prc-val.red{color:var(--expense);}
 .prc-bar-bg{height:6px;background:var(--border);border-radius:99px;overflow:hidden;}
-.prc-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#16a34a,#22c55e);transition:width 0.5s ease;}
+.prc-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--income),var(--primary-light));transition:width 0.5s ease;}
 .pay-quick-btns{display:flex;gap:9px;margin-bottom:16px;}
 .pay-quick-btn{flex:1;padding:9px;border-radius:10px;font-size:0.8rem;font-weight:700;border:1px solid var(--border);background:var(--bg-pill);color:var(--txt-secondary);transition:all var(--tr);}
 .pay-quick-btn:active{transform:scale(0.95);}

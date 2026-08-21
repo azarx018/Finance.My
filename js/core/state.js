@@ -13,7 +13,7 @@ import { todayStr } from './utils.js';
 // embedded in exports/backups, and used to bust the Service Worker
 // cache. Bump this (and sw.js CACHE_NAME + index.html footer text)
 // on every release.
-export const APP_VERSION = '5.7';
+export const APP_VERSION = '5.8';
 
 // ===================== CATEGORIES =====================
 export const INCOME_CATS = [
@@ -54,7 +54,7 @@ export const APP = {
   dashFilter:'month', histFilter:'all', histSearch:'', debtFilter:'all', analitikPeriod:'month',
   deleteTarget:null,
   savingBucketTab:'active', // 'active' | 'completed' — Tabungan page tab
-  darkMode:false, notifEnabled:false, notifTime:'20:00', notifTimerId:null,
+  darkMode:false, theme:'emerald', notifEnabled:false, notifTime:'20:00', notifTimerId:null,
   txPhoto:null,
   // Kalender page state. Originally assigned onto APP after the fact
   // (`APP.calYear = APP.calYear || ...`) right before renderKalender() in
@@ -68,5 +68,5 @@ export const APP = {
 export const KEYS = {
   tx:'azf3_tx', goals:'azf3_goals', debts:'azf3_debts',
   wallets:'azf3_wallets',
-  dark:'azf3_dark', notif:'azf3_notif', ntime:'azf3_ntime',
+  dark:'azf3_dark', theme:'azf3_theme', notif:'azf3_notif', ntime:'azf3_ntime',
 };

@@ -11,6 +11,13 @@ import { APP, KEYS } from './state.js';
 import { showToast } from './utils.js';
 
 // ===================== STORAGE (IndexedDB) =====================
+// DB_NAME is the actual IndexedDB database name already sitting on every
+// existing user's device — NEVER rename this to match app rebranding (e.g.
+// the "Azar Finance" → "My Finance" rename in v5.8). Renaming it would make
+// the app open a new, empty database and orphan every existing user's data.
+// The same applies to every key in KEYS (js/core/state.js) and to
+// BACKUP_LAST_KEY (js/features/backup.js) — cosmetic renames belong in
+// display strings and filenames only, never in storage keys.
 const DB_NAME    = 'AzarFinanceDB';
 const DB_VERSION = 1;
 export const STORE_DATA     = 'appdata';   // key-value store for all app data
@@ -78,6 +85,7 @@ async function _saveSettingsAsync() {
   try {
     await Promise.all([
       idbSet(STORE_SETTINGS, KEYS.dark,  APP.darkMode),
+      idbSet(STORE_SETTINGS, KEYS.theme, APP.theme),
       idbSet(STORE_SETTINGS, KEYS.notif, APP.notifEnabled),
       idbSet(STORE_SETTINGS, KEYS.ntime, APP.notifTime),
     ]);

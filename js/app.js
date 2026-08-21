@@ -52,7 +52,7 @@ import {
 } from './features/budget.js';
 import { openReminderSheet, saveReminder, scheduleNotif } from './features/reminder.js';
 import {
-  applyDark, checkAutoBackup, doAutoBackup, exportCSV, exportJSON, importJSON,
+  applyDark, applyTheme, checkAutoBackup, doAutoBackup, exportCSV, exportJSON, importJSON,
 } from './features/backup.js';
 
 // Importing these registers each page with the router (see the
@@ -102,6 +102,7 @@ async function init() {
   await loadAll();
   checkAutoBackup();
   applyDark();
+  applyTheme();
   $('#notif-toggle').checked          = APP.notifEnabled;
   $('#dark-toggle-settings').checked  = APP.darkMode;
   if (APP.notifEnabled) { $('#notif-time-row').style.display=''; $('#notif-time').value=APP.notifTime; }
@@ -151,6 +152,13 @@ async function init() {
     showToast(APP.darkMode?'🌙 Dark mode aktif':'☀️ Light mode aktif','info');
   });
   $('#dark-toggle-settings').addEventListener('change', e => { APP.darkMode=e.target.checked; applyDark(); saveSettings(); });
+
+  // THEME PICKER
+  $$('.theme-swatch').forEach(sw => sw.addEventListener('click', () => {
+    APP.theme = sw.dataset.theme;
+    applyTheme(); saveSettings();
+    showToast('🎨 Tema diganti','success');
+  }));
 
   // NOTIF
   $('#notif-btn').addEventListener('click', () => navigateTo('settings'));

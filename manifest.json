@@ -1,6 +1,6 @@
 {
-  "name": "Azar Finance",
-  "short_name": "AzarFinance",
+  "name": "My Finance",
+  "short_name": "My Finance",
   "description": "Pencatatan keuangan pribadi — income & expense tracker",
   "start_url": "./index.html",
   "display": "standalone",
